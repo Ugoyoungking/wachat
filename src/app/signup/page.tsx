@@ -13,7 +13,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Logo } from '@/components/logo';
-import { GoogleIcon, AppleIcon } from '@/components/icons';
+import { GoogleIcon } from '@/components/icons';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/firebase';
 import { signInWithGoogle } from '@/firebase/auth/auth-service';
@@ -79,14 +79,10 @@ export default function SignupPage() {
               <span className="bg-card px-2 text-muted-foreground">Or sign up with</span>
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4">
             <Button variant="outline" onClick={handleGoogleSignIn}>
               <GoogleIcon className="mr-2 h-4 w-4" />
               Google
-            </Button>
-            <Button variant="outline">
-              <AppleIcon className="mr-2 h-4 w-4" />
-              Apple
             </Button>
           </div>
         </CardContent>
