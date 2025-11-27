@@ -1,5 +1,3 @@
-import { PlaceHolderImages } from './placeholder-images';
-
 export type User = {
   id: string;
   name: string;
@@ -21,18 +19,18 @@ export type Chat = {
 };
 
 const users: User[] = [
-  { id: 'user1', name: 'Alice', avatar: PlaceHolderImages.find(p => p.id === 'avatar1')?.imageUrl || '', lastSeen: 'online' },
-  { id: 'user2', name: 'Bob', avatar: PlaceHolderImages.find(p => p.id === 'avatar2')?.imageUrl || '', lastSeen: 'online' },
-  { id: 'user3', name: 'Charlie', avatar: PlaceHolderImages.find(p => p.id === 'avatar3')?.imageUrl || '', lastSeen: '5m ago' },
-  { id: 'user4', name: 'Diana', avatar: PlaceHolderImages.find(p => p.id === 'avatar4')?.imageUrl || '', lastSeen: '1h ago' },
-  { id: 'user5', name: 'Eve', avatar: PlaceHolderImages.find(p => p.id === 'avatar5')?.imageUrl || '', lastSeen: 'yesterday' },
-  { id: 'user6', name: 'Frank', avatar: PlaceHolderImages.find(p => p.id === 'avatar6')?.imageUrl || '', lastSeen: '2 days ago' },
+  { id: 'user1', name: 'Alice', avatar: 'avatar1', lastSeen: 'online' },
+  { id: 'user2', name: 'Bob', avatar: 'avatar2', lastSeen: 'online' },
+  { id: 'user3', name: 'Charlie', avatar: 'avatar3', lastSeen: '5m ago' },
+  { id: 'user4', name: 'Diana', avatar: 'avatar4', lastSeen: '1h ago' },
+  { id: 'user5', name: 'Eve', avatar: 'avatar5', lastSeen: 'yesterday' },
+  { id: 'user6', name: 'Frank', avatar: 'avatar6', lastSeen: '2 days ago' },
 ];
 
 export const currentUser: User = {
   id: 'currentUser',
   name: 'John Doe',
-  avatar: PlaceHolderImages.find(p => p.id === 'user-avatar')?.imageUrl || '',
+  avatar: 'user-avatar',
 };
 
 export const chats: Chat[] = [

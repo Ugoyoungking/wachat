@@ -1,21 +1,70 @@
 'use client';
 
 import { useState } from 'react';
-import Image from 'next/image';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Textarea } from '@/components/ui/textarea';
-import { chats, currentUser, type Chat } from '@/lib/data';
+import { chats as initialChats, currentUser, type Chat, type Message } from '@/lib/data';
 import { cn } from '@/lib/utils';
 import { Lock, MoreVertical, Paperclip, Search, Send } from 'lucide-react';
+import { PlaceHolderImages } from '@/lib/placeholder-images';
 
 export default function ChatClient() {
-  const [selectedChat, setSelectedChat] = useState<Chat>(chats[0]);
+  const [chats, setChats] = useState<Chat[]>(initialChats);
+  const [selectedChatId, setSelectedChatId] = useState<string>(initialChats[0].id);
+  const [message, setMessage] = useState('');
 
-  const otherUser = selectedChat.users.find((u) => u.id !== currentUser.id);
+  const selectedChat = chats.find((chat) => chat.id === selectedChatId);
+
+  const otherUser = selectedChat?.users.find((u) => u.id !== currentUser.id);
+
+  const handleSendMessage = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (message.trim() === '' || !selectedChat) return;
+
+    const newMessage: Message = {
+      id: `msg${Date.now()}`,
+      senderId: currentUser.id,
+      text: message.trim(),
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    };
+
+    const updatedChats = chats.map((chat) => {
+      if (chat.id === selectedChat.id) {
+        return {
+          ...chat,
+          messages: [...chat.messages, newMessage],
+        };
+      }
+      return chat;
+    });
+
+    setChats(updatedChats);
+    setMessage('');
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSendMessage(e as any);
+    }
+  };
+
+  const userAvatar = (userId: string) => {
+    const user = selectedChat?.users.find((u) => u.id === userId);
+    if (!user) return null;
+    const avatar = PlaceHolderImages.find((p) => p.id === user.avatar.split('/').pop()?.split('?')[0]);
+    return avatar?.imageUrl || user.avatar;
+  }
+
+  const getAvatarFallback = (userId: string) => {
+    const user = selectedChat?.users.find((u) => u.id === userId);
+    if (!user) return 'U';
+    return user.name.charAt(0);
+  }
 
   return (
     <div className="h-[calc(100vh-4rem)]">
@@ -36,14 +85,14 @@ export default function ChatClient() {
                   return (
                     <button
                       key={chat.id}
-                      onClick={() => setSelectedChat(chat)}
+                      onClick={() => setSelectedChatId(chat.id)}
                       className={cn(
                         'flex w-full items-center gap-3 rounded-md p-2 text-left transition-colors hover:bg-accent/50',
-                        selectedChat.id === chat.id && 'bg-accent'
+                        selectedChat?.id === chat.id && 'bg-accent'
                       )}
                     >
                       <Avatar>
-                        <AvatarImage src={user.avatar} alt={user.name} />
+                        <AvatarImage src={userAvatar(user.id)} alt={user.name} />
                         <AvatarFallback>{user.name.charAt(0)}</AvatarFallback>
                       </Avatar>
                       <div className="flex-1 truncate">
@@ -62,11 +111,11 @@ export default function ChatClient() {
             </ScrollArea>
           </div>
           <div className="flex flex-col h-full">
-            {otherUser && (
+            {otherUser && selectedChat && (
               <>
                 <div className="flex items-center gap-4 border-b p-4">
                   <Avatar>
-                    <AvatarImage src={otherUser.avatar} alt={otherUser.name} />
+                    <AvatarImage src={userAvatar(otherUser.id)} alt={otherUser.name} />
                     <AvatarFallback>{otherUser.name.charAt(0)}</AvatarFallback>
                   </Avatar>
                   <div className="flex-1">
@@ -93,10 +142,10 @@ export default function ChatClient() {
                       >
                         <Avatar className="h-8 w-8">
                           <AvatarImage
-                            src={selectedChat.users.find((u) => u.id === message.senderId)?.avatar}
+                            src={userAvatar(message.senderId)}
                           />
                           <AvatarFallback>
-                            {selectedChat.users.find((u) => u.id === message.senderId)?.name.charAt(0)}
+                           {getAvatarFallback(message.senderId)}
                           </AvatarFallback>
                         </Avatar>
                         <div
@@ -113,15 +162,22 @@ export default function ChatClient() {
                     ))}
                   </div>
                 </ScrollArea>
-                <div className="flex items-start gap-4 border-t p-4">
-                  <Textarea placeholder="Type a message..." className="min-h-0 flex-1 resize-none" rows={1} />
-                  <Button variant="ghost" size="icon">
+                <form onSubmit={handleSendMessage} className="flex items-start gap-4 border-t p-4">
+                  <Textarea
+                    placeholder="Type a message..."
+                    className="min-h-0 flex-1 resize-none"
+                    rows={1}
+                    value={message}
+                    onChange={(e) => setMessage(e.target.value)}
+                    onKeyDown={handleKeyDown}
+                  />
+                  <Button variant="ghost" size="icon" type="button">
                     <Paperclip className="h-5 w-5" />
                   </Button>
-                  <Button size="icon" className="bg-accent hover:bg-accent/90">
+                  <Button type="submit" size="icon" className="bg-accent hover:bg-accent/90" disabled={!message.trim()}>
                     <Send className="h-5 w-5" />
                   </Button>
-                </div>
+                </form>
               </>
             )}
           </div>
