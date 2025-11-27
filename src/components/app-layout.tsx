@@ -78,20 +78,20 @@ export function AppLayout({ children }: { children: ReactNode }) {
           <SidebarMenu>
             <SidebarMenuItem asChild>
               <Collapsible open={isChatsOpen} onOpenChange={setIsChatsOpen} className="w-full">
-                  <CollapsibleTrigger asChild>
-                    <SidebarMenuButton className="justify-between">
-                      <span className="flex items-center gap-2">
-                        <MessageSquare/>
-                        <span>Chats</span>
-                      </span>
-                      <ChevronDown
-                        className={cn(
-                          'h-4 w-4 transition-transform',
-                          isChatsOpen && 'rotate-180'
-                        )}
-                      />
-                    </SidebarMenuButton>
-                  </CollapsibleTrigger>
+                <CollapsibleTrigger asChild>
+                  <SidebarMenuButton className="justify-between">
+                    <span className="flex items-center gap-2">
+                      <MessageSquare/>
+                      <span>Chats</span>
+                    </span>
+                    <ChevronDown
+                      className={cn(
+                        'h-4 w-4 transition-transform',
+                        isChatsOpen && 'rotate-180'
+                      )}
+                    />
+                  </SidebarMenuButton>
+                </CollapsibleTrigger>
                 <CollapsibleContent className="data-[state=open]:animate-collapsible-down data-[state=closed]:animate-collapsible-up overflow-hidden">
                   <SidebarMenu className="pl-4 pt-2">
                     {chatNavItems.map((item) => (
@@ -113,20 +113,20 @@ export function AppLayout({ children }: { children: ReactNode }) {
 
             <SidebarMenuItem asChild>
               <Collapsible open={isAiFeaturesOpen} onOpenChange={setIsAiFeaturesOpen} className="w-full">
-                  <CollapsibleTrigger asChild>
-                      <SidebarMenuButton className="justify-between">
-                        <span className="flex items-center gap-2">
-                          <Sparkles/>
-                          <span>AI Features</span>
-                        </span>
-                        <ChevronDown
-                          className={cn(
-                            'h-4 w-4 transition-transform',
-                            isAiFeaturesOpen && 'rotate-180'
-                          )}
-                        />
-                      </SidebarMenuButton>
-                  </CollapsibleTrigger>
+                <CollapsibleTrigger asChild>
+                    <SidebarMenuButton className="justify-between">
+                      <span className="flex items-center gap-2">
+                        <Sparkles/>
+                        <span>AI Features</span>
+                      </span>
+                      <ChevronDown
+                        className={cn(
+                          'h-4 w-4 transition-transform',
+                          isAiFeaturesOpen && 'rotate-180'
+                        )}
+                      />
+                    </SidebarMenuButton>
+                </CollapsibleTrigger>
                 <CollapsibleContent className="data-[state=open]:animate-collapsible-down data-[state=closed]:animate-collapsible-up overflow-hidden">
                   <SidebarMenu className="pl-4 pt-2">
                   {aiFeaturesNavItems.map((item) => (
