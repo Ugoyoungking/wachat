@@ -76,75 +76,75 @@ export function AppLayout({ children }: { children: ReactNode }) {
         </SidebarHeader>
         <SidebarContent>
           <SidebarMenu>
-            <Collapsible open={isChatsOpen} onOpenChange={setIsChatsOpen} className="w-full">
-              <SidebarMenuItem>
-                <CollapsibleTrigger asChild>
-                  <SidebarMenuButton className="justify-between">
-                    <span className="flex items-center gap-2">
-                      <MessageSquare/>
-                      <span>Chats</span>
-                    </span>
-                    <ChevronDown
-                      className={cn(
-                        'h-4 w-4 transition-transform',
-                        isChatsOpen && 'rotate-180'
-                      )}
-                    />
-                  </SidebarMenuButton>
-                </CollapsibleTrigger>
-              </SidebarMenuItem>
-              <CollapsibleContent className="data-[state=open]:animate-collapsible-down data-[state=closed]:animate-collapsible-up overflow-hidden">
-                <SidebarMenu className="pl-4 pt-2">
-                  {chatNavItems.map((item) => (
+            <SidebarMenuItem>
+              <Collapsible open={isChatsOpen} onOpenChange={setIsChatsOpen} className="w-full">
+                  <CollapsibleTrigger asChild>
+                    <SidebarMenuButton className="justify-between">
+                      <span className="flex items-center gap-2">
+                        <MessageSquare/>
+                        <span>Chats</span>
+                      </span>
+                      <ChevronDown
+                        className={cn(
+                          'h-4 w-4 transition-transform',
+                          isChatsOpen && 'rotate-180'
+                        )}
+                      />
+                    </SidebarMenuButton>
+                  </CollapsibleTrigger>
+                <CollapsibleContent className="data-[state=open]:animate-collapsible-down data-[state=closed]:animate-collapsible-up overflow-hidden">
+                  <SidebarMenu className="pl-4 pt-2">
+                    {chatNavItems.map((item) => (
+                      <SidebarMenuItem key={item.href}>
+                        <Link href={item.href}>
+                          <SidebarMenuButton asChild isActive={pathname.startsWith(item.href)} tooltip={item.label}>
+                            <span>
+                              {/* The icon is removed from here to avoid duplication as it is in the trigger */}
+                              <span>{item.label}</span>
+                            </span>
+                          </SidebarMenuButton>
+                        </Link>
+                      </SidebarMenuItem>
+                    ))}
+                  </SidebarMenu>
+                </CollapsibleContent>
+              </Collapsible>
+            </SidebarMenuItem>
+
+            <SidebarMenuItem>
+              <Collapsible open={isAiFeaturesOpen} onOpenChange={setIsAiFeaturesOpen} className="w-full">
+                  <CollapsibleTrigger asChild>
+                      <SidebarMenuButton className="justify-between">
+                        <span className="flex items-center gap-2">
+                          <Sparkles/>
+                          <span>AI Features</span>
+                        </span>
+                        <ChevronDown
+                          className={cn(
+                            'h-4 w-4 transition-transform',
+                            isAiFeaturesOpen && 'rotate-180'
+                          )}
+                        />
+                      </SidebarMenuButton>
+                  </CollapsibleTrigger>
+                <CollapsibleContent className="data-[state=open]:animate-collapsible-down data-[state=closed]:animate-collapsible-up overflow-hidden">
+                  <SidebarMenu className="pl-4 pt-2">
+                  {aiFeaturesNavItems.map((item) => (
                     <SidebarMenuItem key={item.href}>
                       <Link href={item.href}>
                         <SidebarMenuButton asChild isActive={pathname.startsWith(item.href)} tooltip={item.label}>
                           <span>
-                            {/* The icon is removed from here to avoid duplication as it is in the trigger */}
+                            {item.icon}
                             <span>{item.label}</span>
                           </span>
                         </SidebarMenuButton>
                       </Link>
                     </SidebarMenuItem>
                   ))}
-                </SidebarMenu>
-              </CollapsibleContent>
-            </Collapsible>
-
-            <Collapsible open={isAiFeaturesOpen} onOpenChange={setIsAiFeaturesOpen} className="w-full">
-              <SidebarMenuItem>
-                <CollapsibleTrigger asChild>
-                    <SidebarMenuButton className="justify-between">
-                      <span className="flex items-center gap-2">
-                        <Sparkles/>
-                        <span>AI Features</span>
-                      </span>
-                      <ChevronDown
-                        className={cn(
-                          'h-4 w-4 transition-transform',
-                          isAiFeaturesOpen && 'rotate-180'
-                        )}
-                      />
-                    </SidebarMenuButton>
-                </CollapsibleTrigger>
-              </SidebarMenuItem>
-              <CollapsibleContent className="data-[state=open]:animate-collapsible-down data-[state=closed]:animate-collapsible-up overflow-hidden">
-                <SidebarMenu className="pl-4 pt-2">
-                {aiFeaturesNavItems.map((item) => (
-                  <SidebarMenuItem key={item.href}>
-                    <Link href={item.href}>
-                      <SidebarMenuButton asChild isActive={pathname.startsWith(item.href)} tooltip={item.label}>
-                        <span>
-                          {item.icon}
-                          <span>{item.label}</span>
-                        </span>
-                      </SidebarMenuButton>
-                    </Link>
-                  </SidebarMenuItem>
-                ))}
-                </SidebarMenu>
-              </CollapsibleContent>
-            </Collapsible>
+                  </SidebarMenu>
+                </CollapsibleContent>
+              </Collapsible>
+            </SidebarMenuItem>
             
             {bottomNavItems.map((item) => (
               <SidebarMenuItem key={item.href}>
