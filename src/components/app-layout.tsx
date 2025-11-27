@@ -76,7 +76,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
         </SidebarHeader>
         <SidebarContent>
           <SidebarMenu>
-            <SidebarMenuItem asChild>
+            <SidebarMenuItem>
               <Collapsible open={isChatsOpen} onOpenChange={setIsChatsOpen} className="w-full">
                 <CollapsibleTrigger asChild>
                   <SidebarMenuButton className="justify-between">
@@ -111,7 +111,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
               </Collapsible>
             </SidebarMenuItem>
 
-            <SidebarMenuItem asChild>
+            <SidebarMenuItem>
               <Collapsible open={isAiFeaturesOpen} onOpenChange={setIsAiFeaturesOpen} className="w-full">
                 <CollapsibleTrigger asChild>
                     <SidebarMenuButton className="justify-between">
