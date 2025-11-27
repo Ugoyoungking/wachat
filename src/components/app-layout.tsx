@@ -2,7 +2,7 @@
 import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { Bot, MessageSquare, Settings, Sparkles, LogOut } from 'lucide-react';
+import { Bot, ChevronDown, MessageSquare, Settings, Sparkles, LogOut } from 'lucide-react';
 import {
   SidebarProvider,
   Sidebar,
@@ -14,12 +14,19 @@ import {
   SidebarFooter,
   SidebarInset,
 } from '@/components/ui/sidebar';
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible"
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Logo } from '@/components/logo';
 import { useAuth, useUser } from '@/firebase';
 import { signOut } from '@/firebase/auth/auth-service';
 import { useToast } from '@/hooks/use-toast';
+import { cn } from '@/lib/utils';
+import { useState } from 'react';
 
 export function AppLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
@@ -27,6 +34,8 @@ export function AppLayout({ children }: { children: ReactNode }) {
   const auth = useAuth();
   const router = useRouter();
   const { toast } = useToast();
+  const [isAiFeaturesOpen, setIsAiFeaturesOpen] = useState(pathname.startsWith('/wachat-ai') || pathname.startsWith('/custom-ai'));
+
 
   const handleSignOut = async () => {
     if (!auth) return;
@@ -42,12 +51,18 @@ export function AppLayout({ children }: { children: ReactNode }) {
     }
   };
 
-  const navItems = [
+  const topNavItems = [
     { href: '/chat', icon: <MessageSquare />, label: 'Chats' },
+  ];
+
+  const aiFeaturesNavItems = [
     { href: '/wachat-ai', icon: <Bot />, label: 'WaChat AI' },
     { href: '/custom-ai', icon: <Sparkles />, label: 'Custom AI' },
-    { href: '/settings', icon: <Settings />, label: 'Settings' },
   ];
+  
+  const bottomNavItems = [
+    { href: '/settings', icon: <Settings />, label: 'Settings' },
+  ]
 
   return (
     <SidebarProvider>
@@ -60,7 +75,55 @@ export function AppLayout({ children }: { children: ReactNode }) {
         </SidebarHeader>
         <SidebarContent>
           <SidebarMenu>
-            {navItems.map((item) => (
+            {topNavItems.map((item) => (
+              <SidebarMenuItem key={item.href}>
+                <Link href={item.href}>
+                  <SidebarMenuButton asChild isActive={pathname.startsWith(item.href)} tooltip={item.label}>
+                    <span>
+                      {item.icon}
+                      <span>{item.label}</span>
+                    </span>
+                  </SidebarMenuButton>
+                </Link>
+              </SidebarMenuItem>
+            ))}
+
+            <Collapsible open={isAiFeaturesOpen} onOpenChange={setIsAiFeaturesOpen} className="w-full">
+              <SidebarMenuItem>
+                <CollapsibleTrigger asChild>
+                    <SidebarMenuButton className="justify-between">
+                      <span className="flex items-center gap-2">
+                        <Sparkles/>
+                        <span>AI Features</span>
+                      </span>
+                      <ChevronDown
+                        className={cn(
+                          'h-4 w-4 transition-transform',
+                          isAiFeaturesOpen && 'rotate-180'
+                        )}
+                      />
+                    </SidebarMenuButton>
+                </CollapsibleTrigger>
+              </SidebarMenuItem>
+              <CollapsibleContent className="data-[state=open]:animate-collapsible-down data-[state=closed]:animate-collapsible-up overflow-hidden">
+                <SidebarMenu className="pl-4 pt-2">
+                {aiFeaturesNavItems.map((item) => (
+                  <SidebarMenuItem key={item.href}>
+                    <Link href={item.href}>
+                      <SidebarMenuButton asChild isActive={pathname.startsWith(item.href)} tooltip={item.label}>
+                        <span>
+                          {item.icon}
+                          <span>{item.label}</span>
+                        </span>
+                      </SidebarMenuButton>
+                    </Link>
+                  </SidebarMenuItem>
+                ))}
+                </SidebarMenu>
+              </CollapsibleContent>
+            </Collapsible>
+            
+            {bottomNavItems.map((item) => (
               <SidebarMenuItem key={item.href}>
                 <Link href={item.href}>
                   <SidebarMenuButton asChild isActive={pathname.startsWith(item.href)} tooltip={item.label}>
