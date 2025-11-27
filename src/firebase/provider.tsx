@@ -1,5 +1,5 @@
 'use client';
-import { getFirebase } from '@/firebase';
+import { initializeFirebase } from '@/firebase';
 import { Auth } from 'firebase/auth';
 import { Firestore } from 'firebase/firestore';
 import { FirebaseApp } from 'firebase/app';
@@ -14,7 +14,7 @@ type FirebaseContextValue = {
 const FirebaseContext = createContext<FirebaseContextValue | null>(null);
 
 export const FirebaseProvider = ({ children }: { children: React.ReactNode }) => {
-  const { app, auth, firestore } = getFirebase();
+  const { app, auth, firestore } = initializeFirebase();
   return (
     <FirebaseContext.Provider value={{ app, auth, firestore }}>
       {children}
@@ -29,3 +29,7 @@ export const useFirebase = () => {
   }
   return context;
 };
+
+export const useFirebaseApp = () => useFirebase().app;
+export const useAuth = () => useFirebase().auth;
+export const useFirestore = () => useFirebase().firestore;

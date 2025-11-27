@@ -15,13 +15,32 @@ import { Label } from '@/components/ui/label';
 import { Logo } from '@/components/logo';
 import { GoogleIcon, AppleIcon } from '@/components/icons';
 import { useRouter } from 'next/navigation';
+import { useAuth } from '@/firebase';
+import { signInWithGoogle } from '@/firebase/auth/auth-service';
+import { useToast } from '@/hooks/use-toast';
 
 export default function SignupPage() {
   const router = useRouter();
+  const auth = useAuth();
+  const { toast } = useToast();
 
   const handleSignup = (e: React.FormEvent) => {
     e.preventDefault();
     router.push('/verify-email');
+  };
+
+  const handleGoogleSignIn = async () => {
+    if (!auth) return;
+    try {
+      await signInWithGoogle(auth);
+      router.push('/chat');
+    } catch (error) {
+      toast({
+        variant: 'destructive',
+        title: 'Error signing in',
+        description: error instanceof Error ? error.message : 'An unknown error occurred.',
+      });
+    }
   };
 
   return (
@@ -61,7 +80,7 @@ export default function SignupPage() {
             </div>
           </div>
           <div className="grid grid-cols-2 gap-4">
-            <Button variant="outline">
+            <Button variant="outline" onClick={handleGoogleSignIn}>
               <GoogleIcon className="mr-2 h-4 w-4" />
               Google
             </Button>
