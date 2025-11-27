@@ -41,6 +41,12 @@
       "description": "Current user avatar",
       "imageUrl": "https://images.unsplash.com/photo-1685760259914-ee8d2c92d2e0?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHw4fHxwcm9mZXNzaW9uYWwlMjBoZWFkc2hvdHxlbnwwfHx8fDE3NjQyMjI1MjJ8MA&ixlib=rb-4.1.0&q=80&w=1080",
       "imageHint": "professional headshot"
+    },
+    {
+      "id": "qr-code",
+      "description": "QR code placeholder",
+      "imageUrl": "https://images.unsplash.com/photo-1559131397-f94da358f7ca?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHw3fHxxciUyMGNvZGV8ZW58MHx8fHwxNzY0MjIyOTYyfDA&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "qr code"
     }
   ]
 }
