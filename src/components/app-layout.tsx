@@ -76,7 +76,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
         </SidebarHeader>
         <SidebarContent>
           <SidebarMenu>
-            <SidebarMenuItem>
+            <SidebarMenuItem asChild>
               <Collapsible open={isChatsOpen} onOpenChange={setIsChatsOpen} className="w-full">
                   <CollapsibleTrigger asChild>
                     <SidebarMenuButton className="justify-between">
@@ -99,7 +99,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
                         <Link href={item.href}>
                           <SidebarMenuButton asChild isActive={pathname.startsWith(item.href)} tooltip={item.label}>
                             <span>
-                              {/* The icon is removed from here to avoid duplication as it is in the trigger */}
+                              {item.icon}
                               <span>{item.label}</span>
                             </span>
                           </SidebarMenuButton>
@@ -111,7 +111,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
               </Collapsible>
             </SidebarMenuItem>
 
-            <SidebarMenuItem>
+            <SidebarMenuItem asChild>
               <Collapsible open={isAiFeaturesOpen} onOpenChange={setIsAiFeaturesOpen} className="w-full">
                   <CollapsibleTrigger asChild>
                       <SidebarMenuButton className="justify-between">
