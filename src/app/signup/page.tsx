@@ -16,12 +16,12 @@ import { Logo } from '@/components/logo';
 import { GoogleIcon, AppleIcon } from '@/components/icons';
 import { useRouter } from 'next/navigation';
 
-export default function LoginPage() {
+export default function SignupPage() {
   const router = useRouter();
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleSignup = (e: React.FormEvent) => {
     e.preventDefault();
-    router.push('/chat');
+    router.push('/verify-email');
   };
 
   return (
@@ -31,26 +31,25 @@ export default function LoginPage() {
           <div className="mb-4 flex justify-center">
             <Logo />
           </div>
-          <CardTitle className="text-2xl">Welcome Back</CardTitle>
-          <CardDescription>Enter your credentials to access your account.</CardDescription>
+          <CardTitle className="text-2xl">Create an Account</CardTitle>
+          <CardDescription>Enter your details to get started with WaChat.</CardDescription>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleLogin} className="space-y-4">
+          <form onSubmit={handleSignup} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="name">Name</Label>
+              <Input id="name" type="text" placeholder="John Doe" required />
+            </div>
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
               <Input id="email" type="email" placeholder="m@example.com" required />
             </div>
             <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label htmlFor="password">Password</Label>
-                <Link href="#" className="text-sm font-medium text-primary hover:underline">
-                  Forgot password?
-                </Link>
-              </div>
+              <Label htmlFor="password">Password</Label>
               <Input id="password" type="password" required />
             </div>
             <Button type="submit" className="w-full bg-accent text-accent-foreground hover:bg-accent/90">
-              Sign In
+              Sign Up
             </Button>
           </form>
           <div className="relative my-6">
@@ -58,7 +57,7 @@ export default function LoginPage() {
               <span className="w-full border-t" />
             </div>
             <div className="relative flex justify-center text-xs uppercase">
-              <span className="bg-card px-2 text-muted-foreground">Or continue with</span>
+              <span className="bg-card px-2 text-muted-foreground">Or sign up with</span>
             </div>
           </div>
           <div className="grid grid-cols-2 gap-4">
@@ -74,9 +73,9 @@ export default function LoginPage() {
         </CardContent>
         <CardFooter className="justify-center">
           <p className="text-sm text-muted-foreground">
-            Don't have an account?{' '}
-            <Link href="/signup" className="font-medium text-primary hover:underline">
-              Sign up
+            Already have an account?{' '}
+            <Link href="/" className="font-medium text-primary hover:underline">
+              Sign in
             </Link>
           </p>
         </CardFooter>
