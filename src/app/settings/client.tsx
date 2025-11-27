@@ -11,6 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { PlaceHolderImages } from '@/lib/placeholder-images';
 import { Laptop, Smartphone, Upload, QrCode } from 'lucide-react';
+import { useUser } from '@/firebase';
 
 const devices = [
   { icon: <Laptop className="h-5 w-5 text-muted-foreground" />, name: 'Chrome on macOS', location: 'New York, USA', lastActive: 'Active now' },
@@ -19,8 +20,13 @@ const devices = [
 ];
 
 export default function SettingsClient() {
-  const userAvatar = PlaceHolderImages.find((p) => p.id === 'user-avatar');
+  const { user } = useUser();
   const qrCodeImage = PlaceHolderImages.find((p) => p.id === 'qr-code');
+
+  // Enhance QR code data with user info if available
+  const qrCodeData = user?.email
+    ? `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=mailto:${user.email}`
+    : qrCodeImage?.imageUrl;
 
   return (
     <div className="flex justify-center items-start">
@@ -40,8 +46,8 @@ export default function SettingsClient() {
               <div className="space-y-6">
                 <div className="flex items-center gap-4">
                   <Avatar className="h-20 w-20">
-                    {userAvatar && <AvatarImage src={userAvatar.imageUrl} alt="User Avatar" />}
-                    <AvatarFallback>JD</AvatarFallback>
+                    {user?.photoURL && <AvatarImage src={user.photoURL} alt={user.displayName || 'User Avatar'} />}
+                    <AvatarFallback>{user?.displayName?.charAt(0) || 'U'}</AvatarFallback>
                   </Avatar>
                   <Button variant="outline">
                     <Upload className="mr-2 h-4 w-4" /> Change Photo
@@ -49,15 +55,15 @@ export default function SettingsClient() {
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="name">Name</Label>
-                  <Input id="name" defaultValue="John Doe" />
+                  <Input id="name" defaultValue={user?.displayName || ''} />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="email">Email</Label>
-                  <Input id="email" defaultValue="john.doe@example.com" disabled />
+                  <Input id="email" defaultValue={user?.email || ''} disabled />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="about">About</Label>
-                  <Textarea id="about" defaultValue="Hey there! I am using WaChat." />
+                  <Textarea id="about" placeholder="Hey there! I am using WaChat." />
                 </div>
                 <Button className="bg-accent text-accent-foreground hover:bg-accent/90">Update Profile</Button>
               </div>
@@ -107,13 +113,13 @@ export default function SettingsClient() {
             <TabsContent value="qrcode" className="mt-6">
               <div className="flex flex-col items-center gap-4 text-center">
                 <div className="p-4 bg-white rounded-lg border">
-                  {qrCodeImage && (
+                  {qrCodeData && (
                     <Image
-                      src={qrCodeImage.imageUrl}
+                      src={qrCodeData}
                       alt="Your QR Code"
                       width={200}
                       height={200}
-                      data-ai-hint={qrCodeImage.imageHint}
+                      data-ai-hint="qr code"
                     />
                   )}
                 </div>

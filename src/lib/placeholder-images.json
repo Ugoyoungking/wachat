@@ -9,7 +9,7 @@
     {
       "id": "avatar2",
       "description": "User avatar 2",
-      "imageUrl": "https://images.unsplash.com/photo-1494790108377-be9c29b29330?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHwzfHx3b21hbiUyMHNtaWxpbmd8ZW58MHx8fHwxNzY0MjM4MjcwfDA&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageUrl": "https://images.unsplash.com/photo-1594744803329-e58b31de8bf5?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHw1fHx3b21hbiUyMHNtaWxpbmd8ZW58MHx8fHwxNzY0MjM4MjcwfDA&ixlib=rb-4.1.0&q=80&w=1080",
       "imageHint": "woman smiling"
     },
     {
@@ -21,31 +21,31 @@
     {
       "id": "avatar4",
       "description": "User avatar 4",
-      "imageUrl": "https://images.unsplash.com/photo-1503367555308-33ef8321b60f?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHwxMHx8cGVyc29uJTIwbmF0dXJlfGVufDB8fHx8MTc2NDI4MjI4OXww&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageUrl": "https://images.unsplash.com/photo-1441438045054-547315d595f5?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHw2fHxwZXJzb24lMjBuYXR1cmV8ZW58MHx8fHwxNzY0MjgyMjg5fDA&ixlib=rb-4.1.0&q=80&w=1080",
       "imageHint": "person nature"
     },
     {
       "id": "avatar5",
       "description": "User avatar 5",
-      "imageUrl": "https://images.unsplash.com/photo-1656614002544-c3407a0625bf?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHw4fHx3b21hbiUyMGNpdHl8ZW58MHx8fHwxNzY0MjA4MjcwfDA&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageUrl": "https://images.unsplash.com/photo-1641985421648-3674ebcd8fe4?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHwxMHx8d29tYW4lMjBjaXR5fGVufDB8fHx8MTc2NDIwODI3MHww&ixlib=rb-4.1.0&q=80&w=1080",
       "imageHint": "woman city"
     },
     {
       "id": "avatar6",
       "description": "User avatar 6",
-      "imageUrl": "https://images.unsplash.com/photo-1562851023-018365f8909b?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHw5fHxtYW4lMjBjb2ZmZWV8ZW58MHx8fHwxNzY0MTY3NDk3fDA&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageUrl": "https://images.unsplash.com/photo-1595475038699-283c9aa41e09?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHwzfHxtYW4lMjBjb2ZmZWV8ZW58MHx8fHwxNzY0MTY3NDk3fDA&ixlib=rb-4.1.0&q=80&w=1080",
       "imageHint": "man coffee"
     },
     {
       "id": "user-avatar",
       "description": "Current user avatar",
-      "imageUrl": "https://images.unsplash.com/photo-1685760259914-ee8d2c92d2e0?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHw4fHxwcm9mZXNzaW9uYWwlMjBoZWFkc2hvdHxlbnwwfHx8fDE3NjQyMjI1MjJ8MA&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageUrl": "https://images.unsplash.com/photo-1652471943570-f3590a4e52ed?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHw1fHxwcm9mZXNzaW9uYWwlMjBoZWFkc2hvdHxlbnwwfHx8fDE3NjQyMjI1MjJ8MA&ixlib=rb-4.1.0&q=80&w=1080",
       "imageHint": "professional headshot"
     },
     {
       "id": "qr-code",
       "description": "QR code placeholder",
-      "imageUrl": "https://images.unsplash.com/photo-1559131397-f94da358f7ca?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHw3fHxxciUyMGNvZGV8ZW58MHx8fHwxNzY0MjIyOTYyfDA&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageUrl": "https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=https://example.com",
       "imageHint": "qr code"
     }
   ]

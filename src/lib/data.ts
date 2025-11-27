@@ -71,7 +71,14 @@ export const chats: Chat[] = [
     id: 'chat5',
     users: [currentUser, users[4]],
     messages: [
-      { id: 'msg8', senderId: 'user4', text: 'Just wanted to say hi!', timestamp: '3 days ago' },
+      { id: 'msg8', senderId: 'user5', text: 'Just wanted to say hi!', timestamp: '3 days ago' },
+    ],
+  },
+    {
+    id: 'chat6',
+    users: [currentUser, users[5]],
+    messages: [
+      { id: 'msg9', senderId: 'user6', text: 'See you tomorrow!', timestamp: '4 days ago' },
     ],
   },
 ];
