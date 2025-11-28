@@ -1,3 +1,5 @@
+
+import { Timestamp } from "firebase/firestore";
 export type User = {
   id: string;
   name: string;
@@ -9,13 +11,14 @@ export type Message = {
   id: string;
   senderId: string;
   text: string;
-  timestamp: string;
+  timestamp: Timestamp;
 };
 
 export type Chat = {
   id: string;
   users: User[];
-  messages: Message[];
+  userIds: string[];
+  messages?: Message[];
 };
 
 const users: User[] = [
@@ -28,55 +31,24 @@ const users: User[] = [
 ];
 
 export const currentUser: User = {
-  id: 'currentUser',
+  id: 'currentUser', // This will be replaced by the authenticated user's ID
   name: 'John Doe',
   avatar: 'user-avatar',
 };
 
+// NOTE: The chats data is now for seeding/reference and is not used in the live app.
 export const chats: Chat[] = [
   {
     id: 'chat1',
+    userIds: [currentUser.id, users[0].id],
     users: [currentUser, users[0]],
     messages: [
-      { id: 'msg1', senderId: 'user1', text: 'Hey, how is it going?', timestamp: '10:30 AM' },
-      { id: 'msg2', senderId: 'currentUser', text: 'Pretty good! Working on the WaChat app.', timestamp: '10:31 AM' },
-      { id: 'msg3', senderId: 'user1', text: 'Sounds cool! How is the E2EE implementation?', timestamp: '10:32 AM' },
+      // Messages will be a subcollection in Firestore
     ],
   },
   {
     id: 'chat2',
+    userIds: [currentUser.id, users[1].id],
     users: [currentUser, users[1]],
-    messages: [
-      { id: 'msg4', senderId: 'user2', text: 'Can you send me the latest designs?', timestamp: '11:00 AM' },
-    ],
-  },
-  {
-    id: 'chat3',
-    users: [currentUser, users[2]],
-    messages: [
-      { id: 'msg5', senderId: 'user3', text: 'Let\'s catch up later today.', timestamp: 'Yesterday' },
-      { id: 'msg6', senderId: 'currentUser', text: 'Sure, sounds good.', timestamp: 'Yesterday' },
-    ],
-  },
-  {
-    id: 'chat4',
-    users: [currentUser, users[3]],
-    messages: [
-      { id: 'msg7', senderId: 'user4', text: 'I really like the new AI feature!', timestamp: '2 days ago' },
-    ],
-  },
-  {
-    id: 'chat5',
-    users: [currentUser, users[4]],
-    messages: [
-      { id: 'msg8', senderId: 'user5', text: 'Just wanted to say hi!', timestamp: '3 days ago' },
-    ],
-  },
-    {
-    id: 'chat6',
-    users: [currentUser, users[5]],
-    messages: [
-      { id: 'msg9', senderId: 'user6', text: 'See you tomorrow!', timestamp: '4 days ago' },
-    ],
   },
 ];

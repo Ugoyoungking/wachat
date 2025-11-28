@@ -1,51 +1,61 @@
+
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, FormEvent } from 'react';
+import { collection, addDoc, serverTimestamp, query, orderBy, where } from 'firebase/firestore';
+import { useFirestore, useUser, useCollection } from '@/firebase';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Textarea } from '@/components/ui/textarea';
-import { chats as initialChats, currentUser, type Chat, type Message } from '@/lib/data';
+import { type Chat, type Message } from '@/lib/data';
 import { cn } from '@/lib/utils';
 import { Lock, MoreVertical, Paperclip, Search, Send } from 'lucide-react';
 import { PlaceHolderImages } from '@/lib/placeholder-images';
 
 export default function ChatClient() {
-  const [chats, setChats] = useState<Chat[]>(initialChats);
-  const [selectedChatId, setSelectedChatId] = useState<string>(initialChats[0].id);
+  const { user: currentUser } = useUser();
+  const firestore = useFirestore();
+
+  const chatsQuery = currentUser
+    ? query(collection(firestore, 'chats'), where('userIds', 'array-contains', currentUser.uid))
+    : null;
+  const { data: chats, isLoading: isLoadingChats } = useCollection<Chat>(chatsQuery);
+
+  const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
   const [message, setMessage] = useState('');
 
-  const selectedChat = chats.find((chat) => chat.id === selectedChatId);
+  useEffect(() => {
+    if (!selectedChatId && chats && chats.length > 0) {
+      setSelectedChatId(chats[0].id);
+    }
+  }, [chats, selectedChatId]);
 
-  const otherUser = selectedChat?.users.find((u) => u.id !== currentUser.id);
+  const messagesQuery = selectedChatId
+    ? query(collection(firestore, 'chats', selectedChatId, 'messages'), orderBy('timestamp', 'asc'))
+    : null;
+  const { data: messages, isLoading: isLoadingMessages } = useCollection<Message>(messagesQuery);
 
-  const handleSendMessage = (e: React.FormEvent) => {
+  const selectedChat = chats?.find((chat) => chat.id === selectedChatId);
+  const otherUser = selectedChat?.users.find((u) => u.id !== currentUser?.uid);
+
+  const handleSendMessage = async (e: FormEvent) => {
     e.preventDefault();
-    if (message.trim() === '' || !selectedChat) return;
+    if (message.trim() === '' || !selectedChatId || !currentUser) return;
 
-    const newMessage: Message = {
-      id: `msg${Date.now()}`,
-      senderId: currentUser.id,
+    const messagesCol = collection(firestore, 'chats', selectedChatId, 'messages');
+
+    await addDoc(messagesCol, {
+      senderId: currentUser.uid,
       text: message.trim(),
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-    };
-
-    const updatedChats = chats.map((chat) => {
-      if (chat.id === selectedChat.id) {
-        return {
-          ...chat,
-          messages: [...chat.messages, newMessage],
-        };
-      }
-      return chat;
+      timestamp: serverTimestamp(),
     });
 
-    setChats(updatedChats);
     setMessage('');
   };
-
+  
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
@@ -55,16 +65,32 @@ export default function ChatClient() {
 
   const userAvatar = (userId: string) => {
     const user = selectedChat?.users.find((u) => u.id === userId);
-    if (!user) return null;
+    if (!user) {
+      if(userId === currentUser?.uid) {
+         return currentUser?.photoURL;
+      }
+      return null;
+    }
     const avatar = PlaceHolderImages.find((p) => p.id === user.avatar.split('/').pop()?.split('?')[0]);
     return avatar?.imageUrl || user.avatar;
   }
 
   const getAvatarFallback = (userId: string) => {
     const user = selectedChat?.users.find((u) => u.id === userId);
-    if (!user) return 'U';
+     if (!user) {
+      if(userId === currentUser?.uid) {
+         return currentUser?.displayName?.charAt(0) || 'U';
+      }
+      return 'U';
+    }
     return user.name.charAt(0);
   }
+
+  const formatTimestamp = (timestamp: any) => {
+    if (!timestamp) return '';
+    const date = timestamp.toDate();
+    return new Date(date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  };
 
   return (
     <div className="h-[calc(100vh-4rem)]">
@@ -79,9 +105,11 @@ export default function ChatClient() {
             </div>
             <ScrollArea className="flex-1">
               <div className="space-y-1 p-2">
-                {chats.map((chat) => {
-                  const user = chat.users.find((u) => u.id !== currentUser.id);
+                {isLoadingChats && <p className='p-2 text-sm text-muted-foreground'>Loading chats...</p>}
+                {chats?.map((chat) => {
+                  const user = chat.users.find((u) => u.id !== currentUser?.uid);
                   if (!user) return null;
+                  const lastMessage = chat.messages?.[chat.messages.length - 1];
                   return (
                     <button
                       key={chat.id}
@@ -97,13 +125,17 @@ export default function ChatClient() {
                       </Avatar>
                       <div className="flex-1 truncate">
                         <p className="font-medium">{user.name}</p>
-                        <p className="text-sm text-muted-foreground truncate">
-                          {chat.messages[chat.messages.length - 1].text}
-                        </p>
+                        {lastMessage && (
+                            <p className="text-sm text-muted-foreground truncate">
+                            {lastMessage.text}
+                            </p>
+                        )}
                       </div>
-                      <time className="text-xs text-muted-foreground">
-                        {chat.messages[chat.messages.length - 1].timestamp}
-                      </time>
+                       {lastMessage && (
+                            <time className="text-xs text-muted-foreground">
+                            {formatTimestamp(lastMessage.timestamp)}
+                            </time>
+                       )}
                     </button>
                   );
                 })}
@@ -132,16 +164,17 @@ export default function ChatClient() {
                 </div>
                 <ScrollArea className="flex-1 p-4">
                   <div className="space-y-4">
-                    {selectedChat.messages.map((message) => (
+                    {isLoadingMessages && <p className='text-sm text-muted-foreground'>Loading messages...</p>}
+                    {messages?.map((message) => (
                       <div
                         key={message.id}
                         className={cn(
                           'flex max-w-[75%] gap-2',
-                          message.senderId === currentUser.id ? 'ml-auto flex-row-reverse' : ''
+                          message.senderId === currentUser?.uid ? 'ml-auto flex-row-reverse' : ''
                         )}
                       >
                         <Avatar className="h-8 w-8">
-                          <AvatarImage
+                           <AvatarImage
                             src={userAvatar(message.senderId)}
                           />
                           <AvatarFallback>
@@ -151,12 +184,15 @@ export default function ChatClient() {
                         <div
                           className={cn(
                             'rounded-lg px-3 py-2 text-sm',
-                            message.senderId === currentUser.id
+                            message.senderId === currentUser?.uid
                               ? 'bg-primary text-primary-foreground'
                               : 'bg-muted'
                           )}
                         >
                           {message.text}
+                           <time className="text-xs text-muted-foreground/80 block mt-1">
+                              {formatTimestamp(message.timestamp)}
+                            </time>
                         </div>
                       </div>
                     ))}
@@ -179,6 +215,12 @@ export default function ChatClient() {
                   </Button>
                 </form>
               </>
+            )}
+             {!selectedChat && !isLoadingChats && (
+              <div className="flex flex-col items-center justify-center h-full text-center">
+                  <MessageSquare className="h-16 w-16 text-muted-foreground/50" />
+                  <p className="mt-4 text-lg text-muted-foreground">Select a chat to start messaging</p>
+              </div>
             )}
           </div>
         </CardContent>
