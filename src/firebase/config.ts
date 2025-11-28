@@ -1,3 +1,4 @@
+
 'use client';
 
 // Import the functions you need from the SDKs you need
@@ -7,12 +8,12 @@ import { initializeApp }from 'firebase/app';
 
 // Your web app's Firebase configuration
 const firebaseConfig = {
-  apiKey: "AIzaSyDcJ-WZaG2l26K0MFLCQbTUX19qGkwzOVc",
-  authDomain: "sample-firebase-ai-app-ca6ce.firebaseapp.com",
-  projectId: "sample-firebase-ai-app-ca6ce",
-  storageBucket: "sample-firebase-ai-app-ca6ce.firebasestorage.app",
-  messagingSenderId: "957367123804",
-  appId: "1:957367123804:web:8b0192ed8f62678e054b99"
+  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
+  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID
 };
 
 function initializeFirebase() {
