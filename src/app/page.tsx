@@ -6,8 +6,6 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Logo } from '@/components/logo';
 import { ArrowRight, CheckCircle2, ShieldCheck, Zap } from 'lucide-react';
-import { AppLayout } from '@/components/app-layout';
-import { AuthLayout } from '@/components/auth-layout';
 
 function LandingPage() {
   const features = [
@@ -55,15 +53,15 @@ function LandingPage() {
         <section className="py-12 md:py-24 lg:py-32">
           <div className="container text-center">
             <h1 className="text-4xl font-bold tracking-tighter sm:text-5xl md:text-6xl">
-              Secure, Fast, and Intelligent Messaging
+              WaChat — Secure Messaging, Everywhere
             </h1>
             <p className="mx-auto max-w-[700px] text-muted-foreground md:text-xl/relaxed lg:text-base/relaxed xl:text-xl/relaxed mt-4">
-              Welcome to WaChat, the messaging app that puts your privacy first with end-to-end encryption and powerful AI features.
+             Welcome to WaChat, the secure, fast messaging app with end-to-end encryption and multi-device sync. Get started with email, Google, or Apple sign-in.
             </p>
             <div className="mt-8 flex justify-center gap-4">
               <Button asChild size="lg" className='bg-accent text-accent-foreground hover:bg-accent/90'>
                 <Link href="/signup">
-                  Get Started <ArrowRight className="ml-2 h-4 w-4" />
+                  Get WaChat <ArrowRight className="ml-2 h-4 w-4" />
                 </Link>
               </Button>
               <Button asChild size="lg" variant="outline">
