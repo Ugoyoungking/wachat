@@ -20,14 +20,14 @@ import { useAuth } from '@/firebase';
 import { signInWithGoogle } from '@/firebase/auth/auth-service';
 import { useToast } from '@/hooks/use-toast';
 
-export default function SignupPage() {
+export default function LoginPage() {
   const router = useRouter();
   const auth = useAuth();
   const { toast } = useToast();
 
-  const handleSignup = (e: React.FormEvent) => {
+  const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
-    router.push('/verify-email');
+    router.push('/chat');
   };
 
   const handleGoogleSignIn = async () => {
@@ -51,25 +51,26 @@ export default function SignupPage() {
           <div className="mb-4 flex justify-center">
             <Logo />
           </div>
-          <CardTitle className="text-2xl">Create an Account</CardTitle>
-          <CardDescription>Enter your details to get started with WaChat.</CardDescription>
+          <CardTitle className="text-2xl">Welcome Back</CardTitle>
+          <CardDescription>Enter your credentials to access your account.</CardDescription>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleSignup} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="name">Name</Label>
-              <Input id="name" type="text" placeholder="John Doe" required />
-            </div>
+          <form onSubmit={handleLogin} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
               <Input id="email" type="email" placeholder="m@example.com" required />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
+              <div className="flex items-center justify-between">
+                <Label htmlFor="password">Password</Label>
+                <Link href="#" className="text-sm font-medium text-primary hover:underline">
+                  Forgot password?
+                </Link>
+              </div>
               <Input id="password" type="password" required />
             </div>
             <Button type="submit" className="w-full bg-accent text-accent-foreground hover:bg-accent/90">
-              Sign Up
+              Sign In
             </Button>
           </form>
           <div className="relative my-6">
@@ -77,7 +78,7 @@ export default function SignupPage() {
               <span className="w-full border-t" />
             </div>
             <div className="relative flex justify-center text-xs uppercase">
-              <span className="bg-card px-2 text-muted-foreground">Or sign up with</span>
+              <span className="bg-card px-2 text-muted-foreground">Or continue with</span>
             </div>
           </div>
           <div className="grid grid-cols-1 gap-4">
@@ -89,9 +90,9 @@ export default function SignupPage() {
         </CardContent>
         <CardFooter className="justify-center">
           <p className="text-sm text-muted-foreground">
-            Already have an account?{' '}
-            <Link href="/login" className="font-medium text-primary hover:underline">
-              Sign in
+            Don't have an account?{' '}
+            <Link href="/signup" className="font-medium text-primary hover:underline">
+              Sign up
             </Link>
           </p>
         </CardFooter>
