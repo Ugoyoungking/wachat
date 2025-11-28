@@ -2,7 +2,7 @@
 'use client';
 
 import { useState, useEffect, FormEvent } from 'react';
-import { collection, addDoc, serverTimestamp, query, orderBy, where } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp, query, orderBy, where, getDocs, limit } from 'firebase/firestore';
 import { useFirestore, useUser, useCollection } from '@/firebase';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
@@ -10,28 +10,61 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Textarea } from '@/components/ui/textarea';
-import { type Chat, type Message } from '@/lib/data';
+import { type Chat, type Message, type User as UserType } from '@/lib/data';
 import { cn } from '@/lib/utils';
-import { Lock, MoreVertical, Paperclip, Search, Send } from 'lucide-react';
+import { Lock, MoreVertical, Paperclip, Search, Send, MessageSquare } from 'lucide-react';
 import { PlaceHolderImages } from '@/lib/placeholder-images';
 
 export default function ChatClient() {
   const { user: currentUser } = useUser();
   const firestore = useFirestore();
 
+  // Query for existing chats
   const chatsQuery = currentUser
     ? query(collection(firestore, 'chats'), where('userIds', 'array-contains', currentUser.uid))
     : null;
   const { data: chats, isLoading: isLoadingChats } = useCollection<Chat>(chatsQuery);
+  
+  // Query for all users to display in the contacts list
+  const usersQuery = query(collection(firestore, 'users'));
+  const { data: allUsers, isLoading: isLoadingUsersList } = useCollection<UserType>(usersQuery);
+
 
   const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
   const [message, setMessage] = useState('');
 
-  useEffect(() => {
-    if (!selectedChatId && chats && chats.length > 0) {
-      setSelectedChatId(chats[0].id);
+  // When a user is selected from the list
+  const handleSelectUser = async (user: UserType) => {
+    if (!currentUser) return;
+    
+    // Check if a chat with this user already exists
+    const existingChatQuery = query(
+        collection(firestore, 'chats'),
+        where('userIds', '==', [currentUser.uid, user.id].sort())
+    );
+
+    const querySnapshot = await getDocs(existingChatQuery);
+
+    if (!querySnapshot.empty) {
+        // Chat exists, select it
+        const chatId = querySnapshot.docs[0].id;
+        setSelectedChatId(chatId);
+    } else {
+        // Chat doesn't exist, create it
+        const usersData = [
+            { id: currentUser.uid, name: currentUser.displayName, avatar: currentUser.photoURL },
+            { id: user.id, name: user.name, avatar: user.avatar }
+        ];
+
+        const newChatRef = await addDoc(collection(firestore, 'chats'), {
+            userIds: [currentUser.uid, user.id].sort(),
+            users: usersData,
+            timestamp: serverTimestamp()
+        });
+        setSelectedChatId(newChatRef.id);
     }
-  }, [chats, selectedChatId]);
+  };
+
 
   const messagesQuery = selectedChatId
     ? query(collection(firestore, 'chats', selectedChatId, 'messages'), orderBy('timestamp', 'asc'))
@@ -71,7 +104,12 @@ export default function ChatClient() {
       }
       return null;
     }
-    const avatar = PlaceHolderImages.find((p) => p.id === user.avatar.split('/').pop()?.split('?')[0]);
+    const avatar = PlaceHolderImages.find((p) => p.id === user.avatar?.split('/').pop()?.split('?')[0]);
+    return avatar?.imageUrl || user.avatar;
+  }
+  
+  const contactAvatar = (user: UserType) => {
+    const avatar = PlaceHolderImages.find((p) => p.id === user.avatar?.split('/').pop()?.split('?')[0]);
     return avatar?.imageUrl || user.avatar;
   }
 
@@ -91,6 +129,9 @@ export default function ChatClient() {
     const date = timestamp.toDate();
     return new Date(date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
+  
+  // Filter out the current user from the list
+  const otherUsers = allUsers?.filter(u => u.id !== currentUser?.uid);
 
   return (
     <div className="h-[calc(100vh-4rem)]">
@@ -100,42 +141,30 @@ export default function ChatClient() {
             <div className="p-4">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input placeholder="Search chats..." className="pl-9" />
+                <Input placeholder="Search users..." className="pl-9" />
               </div>
             </div>
             <ScrollArea className="flex-1">
               <div className="space-y-1 p-2">
-                {isLoadingChats && <p className='p-2 text-sm text-muted-foreground'>Loading chats...</p>}
-                {chats?.map((chat) => {
-                  const user = chat.users.find((u) => u.id !== currentUser?.uid);
-                  if (!user) return null;
-                  const lastMessage = chat.messages?.[chat.messages.length - 1];
+                {isLoadingUsersList && <p className='p-2 text-sm text-muted-foreground'>Loading users...</p>}
+                {otherUsers?.map((user) => {
+                   const chatWithUser = chats?.find(c => c.userIds.includes(user.id));
                   return (
                     <button
-                      key={chat.id}
-                      onClick={() => setSelectedChatId(chat.id)}
+                      key={user.id}
+                      onClick={() => handleSelectUser(user)}
                       className={cn(
                         'flex w-full items-center gap-3 rounded-md p-2 text-left transition-colors hover:bg-accent/50',
-                        selectedChat?.id === chat.id && 'bg-accent'
+                        selectedChat?.userIds.includes(user.id) && 'bg-accent'
                       )}
                     >
                       <Avatar>
-                        <AvatarImage src={userAvatar(user.id)} alt={user.name} />
+                        <AvatarImage src={contactAvatar(user)} alt={user.name} />
                         <AvatarFallback>{user.name.charAt(0)}</AvatarFallback>
                       </Avatar>
                       <div className="flex-1 truncate">
                         <p className="font-medium">{user.name}</p>
-                        {lastMessage && (
-                            <p className="text-sm text-muted-foreground truncate">
-                            {lastMessage.text}
-                            </p>
-                        )}
                       </div>
-                       {lastMessage && (
-                            <time className="text-xs text-muted-foreground">
-                            {formatTimestamp(lastMessage.timestamp)}
-                            </time>
-                       )}
                     </button>
                   );
                 })}
@@ -219,7 +248,7 @@ export default function ChatClient() {
              {!selectedChat && !isLoadingChats && (
               <div className="flex flex-col items-center justify-center h-full text-center">
                   <MessageSquare className="h-16 w-16 text-muted-foreground/50" />
-                  <p className="mt-4 text-lg text-muted-foreground">Select a chat to start messaging</p>
+                  <p className="mt-4 text-lg text-muted-foreground">Select a user to start a conversation</p>
               </div>
             )}
           </div>
