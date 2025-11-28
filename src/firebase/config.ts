@@ -10,7 +10,7 @@ const firebaseConfig = {
   apiKey: "AIzaSyDcJ-WZaG2l26K0MFLCQbTUX19qGkwzOVc",
   authDomain: "sample-firebase-ai-app-ca6ce.firebaseapp.com",
   projectId: "sample-firebase-ai-app-ca6ce",
-  storageBucket: "sample-firebase-ai-app-ca6ce.appspot.com",
+  storageBucket: "sample-firebase-ai-app-ca6ce.firebasestorage.app",
   messagingSenderId: "957367123804",
   appId: "1:957367123804:web:8b0192ed8f62678e054b99"
 };
