@@ -16,7 +16,7 @@ import { Lock, MoreVertical, Paperclip, Search, Send, MessageSquare } from 'luci
 import { PlaceHolderImages } from '@/lib/placeholder-images';
 
 export default function ChatClient() {
-  const { user: currentUser } = useUser();
+  const { user: currentUser, isLoading: isLoadingUser } = useUser();
   const firestore = useFirestore();
 
   // Query for existing chats
@@ -25,8 +25,8 @@ export default function ChatClient() {
     : null;
   const { data: chats, isLoading: isLoadingChats } = useCollection<Chat>(chatsQuery);
   
-  // Query for all users to display in the contacts list
-  const usersQuery = query(collection(firestore, 'users'));
+  // Query for all users to display in the contacts list, only run when user is loaded
+  const usersQuery = !isLoadingUser && currentUser ? query(collection(firestore, 'users')) : null;
   const { data: allUsers, isLoading: isLoadingUsersList } = useCollection<UserType>(usersQuery);
 
 
@@ -52,7 +52,7 @@ export default function ChatClient() {
     } else {
         // Chat doesn't exist, create it
         const usersData = [
-            { id: currentUser.uid, name: currentUser.displayName, avatar: currentUser.photoURL },
+            { id: currentUser.uid, name: currentUser.displayName || 'Me', avatar: currentUser.photoURL },
             { id: user.id, name: user.name, avatar: user.avatar }
         ];
 
@@ -96,32 +96,20 @@ export default function ChatClient() {
     }
   };
 
-  const userAvatar = (userId: string) => {
+  const userAvatar = (userId?: string) => {
+    if (!userId) return null;
     const user = selectedChat?.users.find((u) => u.id === userId);
-    if (!user) {
-      if(userId === currentUser?.uid) {
-         return currentUser?.photoURL;
-      }
-      return null;
-    }
-    const avatar = PlaceHolderImages.find((p) => p.id === user.avatar?.split('/').pop()?.split('?')[0]);
-    return avatar?.imageUrl || user.avatar;
+    return user?.avatar || null;
   }
   
   const contactAvatar = (user: UserType) => {
-    const avatar = PlaceHolderImages.find((p) => p.id === user.avatar?.split('/').pop()?.split('?')[0]);
-    return avatar?.imageUrl || user.avatar;
+    return user.avatar;
   }
 
-  const getAvatarFallback = (userId: string) => {
+  const getAvatarFallback = (userId?: string) => {
+    if (!userId) return 'U';
     const user = selectedChat?.users.find((u) => u.id === userId);
-     if (!user) {
-      if(userId === currentUser?.uid) {
-         return currentUser?.displayName?.charAt(0) || 'U';
-      }
-      return 'U';
-    }
-    return user.name.charAt(0);
+    return user?.name?.charAt(0).toUpperCase() || 'U';
   }
 
   const formatTimestamp = (timestamp: any) => {
@@ -132,6 +120,8 @@ export default function ChatClient() {
   
   // Filter out the current user from the list
   const otherUsers = allUsers?.filter(u => u.id !== currentUser?.uid);
+
+  const isLoading = isLoadingUser || isLoadingChats || isLoadingUsersList;
 
   return (
     <div className="h-[calc(100vh-4rem)]">
@@ -146,7 +136,8 @@ export default function ChatClient() {
             </div>
             <ScrollArea className="flex-1">
               <div className="space-y-1 p-2">
-                {isLoadingUsersList && <p className='p-2 text-sm text-muted-foreground'>Loading users...</p>}
+                {isLoading && <p className='p-2 text-sm text-muted-foreground'>Loading users...</p>}
+                {!isLoading && otherUsers?.length === 0 && <p className='p-2 text-sm text-muted-foreground'>No other users found.</p>}
                 {otherUsers?.map((user) => {
                    const chatWithUser = chats?.find(c => c.userIds.includes(user.id));
                   return (
@@ -159,7 +150,7 @@ export default function ChatClient() {
                       )}
                     >
                       <Avatar>
-                        <AvatarImage src={contactAvatar(user)} alt={user.name} />
+                        <AvatarImage src={contactAvatar(user) || undefined} alt={user.name} />
                         <AvatarFallback>{user.name.charAt(0)}</AvatarFallback>
                       </Avatar>
                       <div className="flex-1 truncate">
@@ -176,7 +167,7 @@ export default function ChatClient() {
               <>
                 <div className="flex items-center gap-4 border-b p-4">
                   <Avatar>
-                    <AvatarImage src={userAvatar(otherUser.id)} alt={otherUser.name} />
+                    <AvatarImage src={userAvatar(otherUser.id) || undefined} alt={otherUser.name} />
                     <AvatarFallback>{otherUser.name.charAt(0)}</AvatarFallback>
                   </Avatar>
                   <div className="flex-1">
@@ -204,7 +195,7 @@ export default function ChatClient() {
                       >
                         <Avatar className="h-8 w-8">
                            <AvatarImage
-                            src={userAvatar(message.senderId)}
+                            src={userAvatar(message.senderId) || undefined}
                           />
                           <AvatarFallback>
                            {getAvatarFallback(message.senderId)}
@@ -218,8 +209,8 @@ export default function ChatClient() {
                               : 'bg-muted'
                           )}
                         >
-                          {message.text}
-                           <time className="text-xs text-muted-foreground/80 block mt-1">
+                          <p>{message.text}</p>
+                           <time className="text-xs text-muted-foreground/80 block mt-1 text-right">
                               {formatTimestamp(message.timestamp)}
                             </time>
                         </div>
@@ -233,7 +224,7 @@ export default function ChatClient() {
                     className="min-h-0 flex-1 resize-none"
                     rows={1}
                     value={message}
-                    onChange={(e) => setMessage(e.target.value)}
+                    onChange={(e) => setMessage(e.target..value)}
                     onKeyDown={handleKeyDown}
                   />
                   <Button variant="ghost" size="icon" type="button">
@@ -245,10 +236,11 @@ export default function ChatClient() {
                 </form>
               </>
             )}
-             {!selectedChat && !isLoadingChats && (
+             {!selectedChat && !isLoading && (
               <div className="flex flex-col items-center justify-center h-full text-center">
                   <MessageSquare className="h-16 w-16 text-muted-foreground/50" />
                   <p className="mt-4 text-lg text-muted-foreground">Select a user to start a conversation</p>
+                  <p className="mt-2 text-sm text-muted-foreground">Or sign in with another account in a different browser to test.</p>
               </div>
             )}
           </div>

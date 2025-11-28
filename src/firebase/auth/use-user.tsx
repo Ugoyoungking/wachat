@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -11,7 +12,7 @@ export function useUser() {
 
   useEffect(() => {
     if (!auth) {
-      setIsLoading(false);
+      // If auth is not ready, don't do anything. It might be initializing.
       return;
     }
     const unsubscribe = auth.onAuthStateChanged((user) => {
@@ -19,6 +20,7 @@ export function useUser() {
       setIsLoading(false);
     });
 
+    // Cleanup subscription on unmount
     return () => unsubscribe();
   }, [auth]);
 
