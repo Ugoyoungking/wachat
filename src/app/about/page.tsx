@@ -45,9 +45,9 @@ export default function AboutPage() {
               <div className="flex flex-col items-center">
                 <Avatar className="h-32 w-32 mb-4">
                   <AvatarImage src="https://github.com/Ugoyoungking.png" alt="Developer Avatar" />
-                  <AvatarFallback>JD</AvatarFallback>
+                  <AvatarFallback>U</AvatarFallback>
                 </Avatar>
-                <h3 className="text-xl font-semibold text-foreground">John Doe</h3>
+                <h3 className="text-xl font-semibold text-foreground">Ugochukwu</h3>
                 <p className="text-md mt-1">Lead Developer</p>
                 <p className="mt-4 max-w-md">
                   A passionate software developer with a focus on building secure, user-centric applications. Believes in the power of technology to connect people and protect their digital rights.
