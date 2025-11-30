@@ -9,8 +9,10 @@ import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Textarea } from '@/components/ui/textarea';
-import { Laptop, Smartphone, Upload, QrCode } from 'lucide-react';
-import { useUser } from '@/firebase';
+import { Laptop, Smartphone, Upload, QrCode, Loader2 } from 'lucide-react';
+import { useUser, useFirestore } from '@/firebase';
+import { useState, useEffect } from 'react';
+import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 
 const devices = [
   { icon: <Laptop className="h-5 w-5 text-muted-foreground" />, name: 'Chrome on macOS', location: 'New York, USA', lastActive: 'Active now' },
@@ -20,11 +22,48 @@ const devices = [
 
 export default function SettingsClient() {
   const { user } = useUser();
-  
-  // Enhance QR code data with user info if available
-  const qrCodeData = user?.email
-    ? `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=mailto:${user.email}`
-    : `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=https://example.com`;
+  const firestore = useFirestore();
+  const [qrCodeData, setQrCodeData] = useState<string | null>(null);
+  const [isGeneratingQr, setIsGeneratingQr] = useState(false);
+
+  const generateDeviceLinkToken = async () => {
+    if (!user || !firestore) return null;
+    setIsGeneratingQr(true);
+    try {
+      // This is a simplified token generation. In a real app, use a secure random string.
+      const token = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+      
+      // Set an expiration date for the token (e.g., 5 minutes from now)
+      const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
+
+      // In a real implementation, this would be stored in a secure 'deviceLinkTokens' collection.
+      // For now, we simulate this by creating the linking URL directly.
+      // await addDoc(collection(firestore, 'deviceLinkTokens'), {
+      //   userId: user.uid,
+      //   token: token,
+      //   expiresAt: serverTimestamp(expiresAt),
+      // });
+
+      const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://wachat-app.vercel.app';
+      const linkUrl = `${appUrl}/link?token=${token}`;
+      
+      setQrCodeData(`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(linkUrl)}`);
+
+    } catch (error) {
+      console.error("Error generating QR code token:", error);
+      setQrCodeData(null);
+    } finally {
+      setIsGeneratingQr(false);
+    }
+  };
+
+  useEffect(() => {
+    // Automatically generate QR code when the tab is shown
+    if (user) {
+      generateDeviceLinkToken();
+    }
+  }, [user]);
+
 
   return (
     <div className="flex justify-center items-start">
@@ -38,7 +77,7 @@ export default function SettingsClient() {
             <TabsList className="grid w-full grid-cols-3">
               <TabsTrigger value="profile">Profile</TabsTrigger>
               <TabsTrigger value="devices">Linked Devices</TabsTrigger>
-              <TabsTrigger value="qrcode">My QR Code</TabsTrigger>
+              <TabsTrigger value="qrcode" onClick={generateDeviceLinkToken}>My QR Code</TabsTrigger>
             </TabsList>
             <TabsContent value="profile" className="mt-6">
               <div className="space-y-6">
@@ -110,26 +149,27 @@ export default function SettingsClient() {
             </TabsContent>
             <TabsContent value="qrcode" className="mt-6">
               <div className="flex flex-col items-center gap-4 text-center">
-                <div className="p-4 bg-white rounded-lg border">
-                  {qrCodeData && (
+                <div className="p-4 bg-white rounded-lg border h-[216px] w-[216px] flex items-center justify-center">
+                  {isGeneratingQr && <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />}
+                  {!isGeneratingQr && qrCodeData && (
                     <Image
                       src={qrCodeData}
-                      alt="Your QR Code"
+                      alt="Your device linking QR Code"
                       width={200}
                       height={200}
                       data-ai-hint="qr code"
+                      unoptimized // Necessary for external dynamic images
                     />
                   )}
                 </div>
                 <div className="space-y-1">
-                  <h3 className="text-lg font-medium">Your QR Code</h3>
-                  <p className="text-sm text-muted-foreground">
-                    Friends can scan this code to add you on WaChat.
+                  <h3 className="text-lg font-medium">Link a Device</h3>
+                  <p className="text-sm text-muted-foreground max-w-xs">
+                    To use WaChat on another device, scan this QR code with the new device.
                   </p>
                 </div>
-                <Button variant="outline">
-                  <QrCode className="mr-2 h-4 w-4" />
-                  Scan QR Code
+                <Button variant="outline" onClick={generateDeviceLinkToken} disabled={isGeneratingQr}>
+                  {isGeneratingQr ? <><Loader2 className="mr-2 h-4 w-4 animate-spin"/>Regenerating...</> : 'Regenerate Code'}
                 </Button>
               </div>
             </TabsContent>
