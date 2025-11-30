@@ -14,10 +14,12 @@ import { type Chat, type Message, type User as UserType } from '@/lib/data';
 import { cn } from '@/lib/utils';
 import { Lock, MoreVertical, Paperclip, Search, Send, MessageSquare } from 'lucide-react';
 import { PlaceHolderImages } from '@/lib/placeholder-images';
+import { useSearchParams } from 'next/navigation';
 
 export default function ChatClient() {
   const { user: currentUser, isLoading: isLoadingUser } = useUser();
   const firestore = useFirestore();
+  const searchParams = useSearchParams();
 
   // Query for existing chats
   const chatsQuery = currentUser
@@ -32,6 +34,14 @@ export default function ChatClient() {
 
   const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
   const [message, setMessage] = useState('');
+  
+  useEffect(() => {
+    // Check if there's a chatId in the URL and select it
+    const urlChatId = searchParams.get('chatId');
+    if (urlChatId) {
+      setSelectedChatId(urlChatId);
+    }
+  }, [searchParams]);
 
   // When a user is selected from the list
   const handleSelectUser = async (user: UserType) => {
