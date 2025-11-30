@@ -6,7 +6,7 @@ import { usePathname } from 'next/navigation';
 import { AuthLayout } from '@/components/auth-layout';
 import { AppLayout } from '@/components/app-layout';
 
-const AUTH_ROUTES = ['/login', '/signup', '/verify-email', '/add'];
+const AUTH_ROUTES = ['/login', '/signup', '/verify-email'];
 const PUBLIC_PAGES = ['/']; // Add public pages here
 
 export function ConditionalLayoutProvider({ children }: { children: ReactNode }) {
