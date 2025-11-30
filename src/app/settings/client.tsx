@@ -22,35 +22,53 @@ const devices = [
 export default function SettingsClient() {
   const { user } = useUser();
   const firestore = useFirestore();
-  const [qrCodeData, setQrCodeData] = useState<string | null>(null);
-  const [isGeneratingQr, setIsGeneratingQr] = useState(false);
+  const [deviceLinkQrCodeData, setDeviceLinkQrCodeData] = useState<string | null>(null);
+  const [isGeneratingDeviceLinkQr, setIsGeneratingDeviceLinkQr] = useState(false);
+  const [profileQrCodeData, setProfileQrCodeData] = useState<string | null>(null);
+  const [isGeneratingProfileQr, setIsGeneratingProfileQr] = useState(false);
+
 
   const generateDeviceLinkToken = async () => {
     if (!user || !firestore) return null;
-    setIsGeneratingQr(true);
+    setIsGeneratingDeviceLinkQr(true);
     try {
-      // This is a simplified token generation. In a real app, use a secure random string.
       const token = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
       
-      // In a real implementation, you would store this token in a secure 'deviceLinkTokens' collection in Firestore
-      // with a short TTL (e.g., 5 minutes).
-
       const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://wachat-app.vercel.app';
       const linkUrl = `${appUrl}/link?token=${token}`;
       
-      setQrCodeData(`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(linkUrl)}`);
+      setDeviceLinkQrCodeData(`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(linkUrl)}`);
 
     } catch (error) {
-      console.error("Error generating QR code token:", error);
-      setQrCodeData(null);
+      console.error("Error generating device link QR code:", error);
+      setDeviceLinkQrCodeData(null);
     } finally {
-      setIsGeneratingQr(false);
+      setIsGeneratingDeviceLinkQr(false);
     }
   };
+  
+  const generateProfileQrCode = async () => {
+    if (!user) return null;
+    setIsGeneratingProfileQr(true);
+    try {
+        const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://wachat-app.vercel.app';
+        const addFriendUrl = `${appUrl}/add?user=${user.uid}`;
+        setProfileQrCodeData(`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(addFriendUrl)}`);
+    } catch (error) {
+        console.error("Error generating profile QR code:", error);
+        setProfileQrCodeData(null);
+    } finally {
+        setIsGeneratingProfileQr(false);
+    }
+};
+
 
   const handleTabChange = (value: string) => {
-    if (value === 'qrcode' && !qrCodeData) {
+    if (value === 'linkdevice' && !deviceLinkQrCodeData) {
       generateDeviceLinkToken();
+    }
+    if (value === 'qrcode' && !profileQrCodeData) {
+        generateProfileQrCode();
     }
   };
 
@@ -63,10 +81,11 @@ export default function SettingsClient() {
         </CardHeader>
         <CardContent>
           <Tabs defaultValue="profile" onValueChange={handleTabChange}>
-            <TabsList className="grid w-full grid-cols-3">
+            <TabsList className="grid w-full grid-cols-4">
               <TabsTrigger value="profile">Profile</TabsTrigger>
-              <TabsTrigger value="devices">Linked Devices</TabsTrigger>
               <TabsTrigger value="qrcode">My QR Code</TabsTrigger>
+              <TabsTrigger value="devices">Linked Devices</TabsTrigger>
+              <TabsTrigger value="linkdevice">Link a device</TabsTrigger>
             </TabsList>
             <TabsContent value="profile" className="mt-6">
               <div className="space-y-6">
@@ -94,6 +113,32 @@ export default function SettingsClient() {
                 <Button className="bg-accent text-accent-foreground hover:bg-accent/90">Update Profile</Button>
               </div>
             </TabsContent>
+            <TabsContent value="qrcode" className="mt-6">
+              <div className="flex flex-col items-center gap-4 text-center">
+                <div className="p-4 bg-white rounded-lg border h-[216px] w-[216px] flex items-center justify-center">
+                  {isGeneratingProfileQr && !profileQrCodeData && <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />}
+                  {profileQrCodeData && (
+                    <Image
+                      src={profileQrCodeData}
+                      alt="Your profile QR Code for adding friends"
+                      width={200}
+                      height={200}
+                      data-ai-hint="qr code"
+                      unoptimized // Necessary for external dynamic images
+                    />
+                  )}
+                </div>
+                <div className="space-y-1">
+                  <h3 className="text-lg font-medium">My QR Code</h3>
+                  <p className="text-sm text-muted-foreground max-w-xs">
+                    Your friends can scan this code to add you on WaChat.
+                  </p>
+                </div>
+                <Button variant="outline" onClick={generateProfileQrCode} disabled={isGeneratingProfileQr}>
+                  {isGeneratingProfileQr ? <><Loader2 className="mr-2 h-4 w-4 animate-spin"/>Regenerating...</> : 'Regenerate Code'}
+                </Button>
+              </div>
+            </TabsContent>
             <TabsContent value="devices" className="mt-6">
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
@@ -103,7 +148,6 @@ export default function SettingsClient() {
                       These devices are currently linked to your WaChat account.
                     </p>
                   </div>
-                   <Button className="bg-accent text-accent-foreground hover:bg-accent/90">Link New Device</Button>
                 </div>
                 <Card>
                   <Table>
@@ -136,13 +180,13 @@ export default function SettingsClient() {
                 </Card>
               </div>
             </TabsContent>
-            <TabsContent value="qrcode" className="mt-6">
+            <TabsContent value="linkdevice" className="mt-6">
               <div className="flex flex-col items-center gap-4 text-center">
                 <div className="p-4 bg-white rounded-lg border h-[216px] w-[216px] flex items-center justify-center">
-                  {isGeneratingQr && !qrCodeData && <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />}
-                  {qrCodeData && (
+                  {isGeneratingDeviceLinkQr && !deviceLinkQrCodeData && <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />}
+                  {deviceLinkQrCodeData && (
                     <Image
-                      src={qrCodeData}
+                      src={deviceLinkQrCodeData}
                       alt="Your device linking QR Code"
                       width={200}
                       height={200}
@@ -157,8 +201,8 @@ export default function SettingsClient() {
                     To use WaChat on another device, scan this QR code with the new device.
                   </p>
                 </div>
-                <Button variant="outline" onClick={generateDeviceLinkToken} disabled={isGeneratingQr}>
-                  {isGeneratingQr ? <><Loader2 className="mr-2 h-4 w-4 animate-spin"/>Regenerating...</> : 'Regenerate Code'}
+                <Button variant="outline" onClick={generateDeviceLinkToken} disabled={isGeneratingDeviceLinkQr}>
+                  {isGeneratingDeviceLinkQr ? <><Loader2 className="mr-2 h-4 w-4 animate-spin"/>Regenerating...</> : 'Regenerate Code'}
                 </Button>
               </div>
             </TabsContent>
