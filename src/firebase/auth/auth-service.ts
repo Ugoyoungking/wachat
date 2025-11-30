@@ -1,3 +1,4 @@
+
 'use client';
 import {
   Auth,
@@ -5,6 +6,10 @@ import {
   User,
   signInWithPopup,
   signOut as firebaseSignOut,
+  createUserWithEmailAndPassword,
+  sendEmailVerification,
+  updateProfile,
+  signInWithEmailAndPassword as firebaseSignInWithEmailAndPassword,
 } from 'firebase/auth';
 import { doc, getFirestore, setDoc } from 'firebase/firestore';
 import { getApp } from 'firebase/app';
@@ -29,6 +34,27 @@ export async function signInWithGoogle(auth: Auth) {
   await saveUserToFirestore(result.user);
   return result;
 }
+
+export async function signUpWithEmailAndPassword(auth: Auth, email: string, password: string, displayName: string) {
+  const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+  const user = userCredential.user;
+  
+  // Update the user's profile with the display name
+  await updateProfile(user, { displayName });
+
+  // Save user to Firestore
+  await saveUserToFirestore(user);
+
+  // Send verification email
+  await sendEmailVerification(user);
+
+  return userCredential;
+}
+
+export function signInWithEmailAndPassword(auth: Auth, email: string, password: string) {
+    return firebaseSignInWithEmailAndPassword(auth, email, password);
+}
+
 
 export function signOut(auth: Auth) {
   return firebaseSignOut(auth);
