@@ -12,7 +12,6 @@ import { Textarea } from '@/components/ui/textarea';
 import { Laptop, Smartphone, Upload, QrCode, Loader2 } from 'lucide-react';
 import { useUser, useFirestore } from '@/firebase';
 import { useState, useEffect } from 'react';
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 
 const devices = [
   { icon: <Laptop className="h-5 w-5 text-muted-foreground" />, name: 'Chrome on macOS', location: 'New York, USA', lastActive: 'Active now' },
@@ -33,16 +32,8 @@ export default function SettingsClient() {
       // This is a simplified token generation. In a real app, use a secure random string.
       const token = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
       
-      // Set an expiration date for the token (e.g., 5 minutes from now)
-      const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
-
-      // In a real implementation, this would be stored in a secure 'deviceLinkTokens' collection.
-      // For now, we simulate this by creating the linking URL directly.
-      // await addDoc(collection(firestore, 'deviceLinkTokens'), {
-      //   userId: user.uid,
-      //   token: token,
-      //   expiresAt: serverTimestamp(expiresAt),
-      // });
+      // In a real implementation, you would store this token in a secure 'deviceLinkTokens' collection in Firestore
+      // with a short TTL (e.g., 5 minutes).
 
       const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://wachat-app.vercel.app';
       const linkUrl = `${appUrl}/link?token=${token}`;
@@ -57,13 +48,11 @@ export default function SettingsClient() {
     }
   };
 
-  useEffect(() => {
-    // Automatically generate QR code when the tab is shown
-    if (user) {
+  const handleTabChange = (value: string) => {
+    if (value === 'qrcode' && !qrCodeData) {
       generateDeviceLinkToken();
     }
-  }, [user]);
-
+  };
 
   return (
     <div className="flex justify-center items-start">
@@ -73,11 +62,11 @@ export default function SettingsClient() {
           <CardDescription>Manage your account settings and preferences.</CardDescription>
         </CardHeader>
         <CardContent>
-          <Tabs defaultValue="profile">
+          <Tabs defaultValue="profile" onValueChange={handleTabChange}>
             <TabsList className="grid w-full grid-cols-3">
               <TabsTrigger value="profile">Profile</TabsTrigger>
               <TabsTrigger value="devices">Linked Devices</TabsTrigger>
-              <TabsTrigger value="qrcode" onClick={generateDeviceLinkToken}>My QR Code</TabsTrigger>
+              <TabsTrigger value="qrcode">My QR Code</TabsTrigger>
             </TabsList>
             <TabsContent value="profile" className="mt-6">
               <div className="space-y-6">
@@ -150,8 +139,8 @@ export default function SettingsClient() {
             <TabsContent value="qrcode" className="mt-6">
               <div className="flex flex-col items-center gap-4 text-center">
                 <div className="p-4 bg-white rounded-lg border h-[216px] w-[216px] flex items-center justify-center">
-                  {isGeneratingQr && <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />}
-                  {!isGeneratingQr && qrCodeData && (
+                  {isGeneratingQr && !qrCodeData && <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />}
+                  {qrCodeData && (
                     <Image
                       src={qrCodeData}
                       alt="Your device linking QR Code"
