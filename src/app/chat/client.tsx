@@ -224,7 +224,7 @@ export default function ChatClient() {
                     className="min-h-0 flex-1 resize-none"
                     rows={1}
                     value={message}
-                    onChange={(e) => setMessage(e.target..value)}
+                    onChange={(e) => setMessage(e.target.value)}
                     onKeyDown={handleKeyDown}
                   />
                   <Button variant="ghost" size="icon" type="button">
