@@ -10,8 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { collection, query, where, getDocs, addDoc, serverTimestamp, doc, getDoc } from 'firebase/firestore';
 import { type User as UserType } from '@/lib/data';
 
-
-export default function AddFriendClient() {
+function AddFriendProcessor() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const { toast } = useToast();
@@ -114,20 +113,32 @@ export default function AddFriendClient() {
     addFriend();
   }, [searchParams, router, toast, firestore, currentUser, isLoading]);
 
+  // This component doesn't render anything itself, it just runs the effect.
+  // The UI is handled by the parent AddFriendClient.
+  return null;
+}
+
+
+export default function AddFriendClient() {
   return (
-    <div className="flex min-h-screen items-center justify-center">
-        <Card className="w-full max-w-sm text-center">
-             <CardHeader>
-                <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-accent/20">
-                    <UserPlus className="h-6 w-6 text-accent-foreground" />
-                </div>
-                <CardTitle className="mt-4 text-2xl">Adding Friend...</CardTitle>
-                <CardDescription>Please wait while we connect you.</CardDescription>
-            </CardHeader>
-            <CardContent>
-                <Loader2 className="mx-auto h-12 w-12 animate-spin text-primary" />
-            </CardContent>
-        </Card>
-    </div>
+    <>
+      <Suspense fallback={null}>
+        <AddFriendProcessor />
+      </Suspense>
+      <div className="flex min-h-screen items-center justify-center">
+          <Card className="w-full max-w-sm text-center">
+               <CardHeader>
+                  <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-accent/20">
+                      <UserPlus className="h-6 w-6 text-accent-foreground" />
+                  </div>
+                  <CardTitle className="mt-4 text-2xl">Adding Friend...</CardTitle>
+                  <CardDescription>Please wait while we connect you.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                  <Loader2 className="mx-auto h-12 w-12 animate-spin text-primary" />
+              </CardContent>
+          </Card>
+      </div>
+    </>
   );
 }

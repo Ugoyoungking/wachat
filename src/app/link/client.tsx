@@ -1,6 +1,7 @@
+
 'use client';
 
-import { useEffect } from 'react';
+import { Suspense, useEffect } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth, useUser } from '@/firebase';
@@ -15,7 +16,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 // 5. Secondary device uses `signInWithCustomToken(auth, customToken)` to log in.
 // This is a simplified simulation of that flow.
 
-export default function LinkClient() {
+
+function LinkProcessor() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const { toast } = useToast();
@@ -63,18 +65,27 @@ export default function LinkClient() {
       router.push('/login');
     }
   }, [searchParams, router, toast, auth, user, isLoading]);
+  
+  return null;
+}
 
+export default function LinkClient() {
   return (
-    <div className="flex min-h-screen items-center justify-center">
-        <Card className="w-full max-w-sm text-center">
-             <CardHeader>
-                <CardTitle className="text-2xl">Linking Device...</CardTitle>
-                <CardDescription>Please wait while we securely link your account.</CardDescription>
-            </CardHeader>
-            <CardContent>
-                <Loader2 className="mx-auto h-12 w-12 animate-spin text-primary" />
-            </CardContent>
-        </Card>
-    </div>
+    <>
+      <Suspense>
+        <LinkProcessor />
+      </Suspense>
+      <div className="flex min-h-screen items-center justify-center">
+          <Card className="w-full max-w-sm text-center">
+               <CardHeader>
+                  <CardTitle className="text-2xl">Linking Device...</CardTitle>
+                  <CardDescription>Please wait while we securely link your account.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                  <Loader2 className="mx-auto h-12 w-12 animate-spin text-primary" />
+              </CardContent>
+          </Card>
+      </div>
+    </>
   );
 }
