@@ -1,0 +1,263 @@
+{
+  "entities": {
+    "User": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "User",
+      "type": "object",
+      "description": "Represents a user of the WaChat application.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the user entity."
+        },
+        "email": {
+          "type": "string",
+          "description": "User's email address.",
+          "format": "email"
+        },
+        "name": {
+          "type": "string",
+          "description": "The display name of the user."
+        },
+        "emailVerified": {
+          "type": "boolean",
+          "description": "Indicates whether the user's email has been verified."
+        },
+        "profilePicture": {
+          "type": "string",
+          "description": "URL of the user's profile picture.",
+          "format": "uri"
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Timestamp of when the user account was created.",
+          "format": "date-time"
+        },
+        "lastLogin": {
+          "type": "string",
+          "description": "Timestamp of the user's last login.",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "email",
+        "name",
+        "emailVerified",
+        "createdAt"
+      ]
+    },
+    "Device": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Device",
+      "type": "object",
+      "description": "Represents a device linked to a user account.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the device entity."
+        },
+        "userId": {
+          "type": "string",
+          "description": "Reference to User. (Relationship: User 1:N Device)"
+        },
+        "deviceId": {
+          "type": "string",
+          "description": "Unique device identifier provided by the platform."
+        },
+        "platform": {
+          "type": "string",
+          "description": "The platform of the device (e.g., iOS, Android, Web)."
+        },
+        "lastLogin": {
+          "type": "string",
+          "description": "Timestamp of the device's last login.",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "userId",
+        "deviceId",
+        "platform",
+        "lastLogin"
+      ]
+    },
+    "ChatMessage": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "ChatMessage",
+      "type": "object",
+      "description": "Represents a single message in a chat conversation.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the chat message entity."
+        },
+        "senderId": {
+          "type": "string",
+          "description": "Reference to User. (Relationship: User 1:N ChatMessage as sender)"
+        },
+        "recipientId": {
+          "type": "string",
+          "description": "Reference to User. (Relationship: User 1:N ChatMessage as recipient)"
+        },
+        "content": {
+          "type": "string",
+          "description": "The content of the message."
+        },
+        "timestamp": {
+          "type": "string",
+          "description": "Timestamp of when the message was sent.",
+          "format": "date-time"
+        },
+        "isEncrypted": {
+          "type": "boolean",
+          "description": "Indicates if the message content is end-to-end encrypted."
+        },
+        "mediaUrl": {
+          "type": "string",
+          "description": "URL of the media file (image, video, voice note) attached to the message.",
+          "format": "uri"
+        }
+      },
+      "required": [
+        "id",
+        "senderId",
+        "recipientId",
+        "content",
+        "timestamp",
+        "isEncrypted"
+      ]
+    },
+    "CustomAI": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "CustomAI",
+      "type": "object",
+      "description": "Represents a custom AI created by a user.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the custom AI entity."
+        },
+        "userId": {
+          "type": "string",
+          "description": "Reference to User. (Relationship: User 1:N CustomAI)"
+        },
+        "name": {
+          "type": "string",
+          "description": "The name of the custom AI."
+        },
+        "description": {
+          "type": "string",
+          "description": "Description of the custom AI's purpose and functionality."
+        },
+        "configuration": {
+          "type": "string",
+          "description": "Configuration settings for the custom AI (e.g., model parameters, training data). Stored as a JSON string."
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Timestamp of when the custom AI was created.",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "Timestamp of when the custom AI was last updated.",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "userId",
+        "name",
+        "description",
+        "configuration",
+        "createdAt",
+        "updatedAt"
+      ]
+    }
+  },
+  "auth": {
+    "providers": [
+      "password",
+      "anonymous"
+    ]
+  },
+  "firestore": {
+    "structure": [
+      {
+        "path": "/users/{userId}",
+        "definition": {
+          "entityName": "User",
+          "schema": {
+            "$ref": "#/backend/entities/User"
+          },
+          "description": "Stores user profiles. Path-based ownership: User can only access their own profile.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique identifier of the user."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/users/{userId}/devices/{deviceId}",
+        "definition": {
+          "entityName": "Device",
+          "schema": {
+            "$ref": "#/backend/entities/Device"
+          },
+          "description": "Stores devices linked to a user account. Path-based ownership: User can only access their own devices.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique identifier of the user."
+            },
+            {
+              "name": "deviceId",
+              "description": "The unique identifier of the device."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/chatMessages/{chatMessageId}",
+        "definition": {
+          "entityName": "ChatMessage",
+          "schema": {
+            "$ref": "#/backend/entities/ChatMessage"
+          },
+          "description": "Stores chat messages. `senderId` and `recipientId` fields are present to facilitate querying messages for a specific user.",
+          "params": [
+            {
+              "name": "chatMessageId",
+              "description": "The unique identifier of the chat message."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/users/{userId}/customAIs/{customAIId}",
+        "definition": {
+          "entityName": "CustomAI",
+          "schema": {
+            "$ref": "#/backend/entities/CustomAI"
+          },
+          "description": "Stores custom AIs created by users. Path-based ownership: User can only access their own custom AIs.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique identifier of the user."
+            },
+            {
+              "name": "customAIId",
+              "description": "The unique identifier of the custom AI."
+            }
+          ]
+        }
+      }
+    ],
+    "reasoning": "The Firestore data structure is designed to ensure security, scalability, and debuggability, following the principles of Authorization Independence, Clarity of Intent, DBAC, and QAPs. Authorization independence is achieved through denormalization of authorization data. Since no collaborative features are present, the ownership is path-based, and no membership maps are used. The data structure also uses Structural Segregation by ensuring all documents in a collection share the same security requirements.\n\n*   `/users/{userId}`: Stores user profiles. This collection enforces path-based ownership. A user can only access their profile.\n*   `/users/{userId}/devices/{deviceId}`: Stores device information for multi-device linking. Access is restricted to the owning user based on the path.\n*   `/chatMessages/{chatMessageId}`: Stores all chat messages. While direct access to messages is not defined in the requirements, the structure supports QAPs and authorization rules can be added later for this collection if access to all messages is necessary, for example, for moderation purposes. The `senderId` and `recipientId` fields facilitate querying messages for a specific user.\n*   `/users/{userId}/customAIs/{customAIId}`: Stores the custom AI configurations for each user.  Access is restricted to the owning user based on the path."
+  }
+}
