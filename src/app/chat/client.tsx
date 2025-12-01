@@ -1,7 +1,8 @@
+
 'use client';
 
 import { useState, useEffect, FormEvent, Suspense } from 'react';
-import { collection, addDoc, serverTimestamp, query, orderBy, where, getDocs, limit, doc } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp, query, orderBy, where, getDocs, limit, doc, getDoc } from 'firebase/firestore';
 import { useFirestore, useUser, useCollection } from '@/firebase';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
@@ -10,22 +11,22 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Textarea } from '@/components/ui/textarea';
 import { type Chat, type Message, type User as UserType } from '@/lib/data';
 import { cn } from '@/lib/utils';
-import { Lock, MoreVertical, Paperclip, Search, Send, MessageSquare, BellOff, Users } from 'lucide-react';
+import { Lock, MoreVertical, Paperclip, Search, Send, MessageSquare, BellOff, Users, Phone, Video } from 'lucide-react';
 import { useSearchParams } from 'next/navigation';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import Image from 'next/image';
+import { VideoCall } from '@/components/video-call';
 
 function ChatArea({ selectedChatId, currentUser }: { selectedChatId: string | null; currentUser: UserType | null; }) {
   const firestore = useFirestore();
+  const [isCalling, setIsCalling] = useState(false);
 
   const messagesQuery = selectedChatId
     ? query(collection(firestore, 'chats', selectedChatId, 'messages'), orderBy('timestamp', 'asc'))
     : null;
   const { data: messages, isLoading: isLoadingMessages } = useCollection<Message>(messagesQuery);
   
-  const chatsQuery = selectedChatId ? doc(firestore, 'chats', selectedChatId) : null;
-  // This needs a useDoc hook, but we can fake it for now by just getting chat info from user list
   const [selectedChat, setSelectedChat] = useState<Chat | null>(null);
 
   useEffect(() => {
@@ -114,6 +115,12 @@ function ChatArea({ selectedChatId, currentUser }: { selectedChatId: string | nu
         <div className="flex-1">
           <p className="font-medium">{otherUser.name}</p>
         </div>
+        <Button variant="ghost" size="icon" onClick={() => setIsCalling(true)}>
+          <Video className="h-5 w-5" />
+        </Button>
+         <Button variant="ghost" size="icon" onClick={() => setIsCalling(true)}>
+          <Phone className="h-5 w-5" />
+        </Button>
         <Button variant="ghost" size="icon">
           <MoreVertical className="h-5 w-5" />
         </Button>
@@ -170,6 +177,12 @@ function ChatArea({ selectedChatId, currentUser }: { selectedChatId: string | nu
           <Send className="h-5 w-5" />
         </Button>
       </footer>
+      {isCalling && otherUser && (
+        <VideoCall 
+          contact={otherUser} 
+          onClose={() => setIsCalling(false)} 
+        />
+      )}
     </div>
   )
 }
@@ -187,6 +200,17 @@ function ChatListPanel({ onSelectChat }: { onSelectChat: (chatId: string) => voi
   const { data: allUsers, isLoading: isLoadingUsersList } = useCollection<UserType>(usersQuery);
 
   const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
+  
+  const searchParams = useSearchParams();
+
+  useEffect(() => {
+    const chatIdFromUrl = searchParams.get('chatId');
+    if (chatIdFromUrl) {
+      setSelectedChatId(chatIdFromUrl);
+      onSelectChat(chatIdFromUrl);
+    }
+  }, [searchParams, onSelectChat]);
+
 
   const handleSelectUser = async (user: UserType) => {
     if (!currentUser) return;
@@ -345,3 +369,5 @@ export default function ChatClient() {
     </Suspense>
   )
 }
+
+    
