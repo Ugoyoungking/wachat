@@ -1,3 +1,4 @@
+
 {
   "entities": {
     "User": {
@@ -19,32 +20,17 @@
           "type": "string",
           "description": "The display name of the user."
         },
-        "emailVerified": {
-          "type": "boolean",
-          "description": "Indicates whether the user's email has been verified."
-        },
-        "profilePicture": {
+        "avatar": {
           "type": "string",
           "description": "URL of the user's profile picture.",
           "format": "uri"
-        },
-        "createdAt": {
-          "type": "string",
-          "description": "Timestamp of when the user account was created.",
-          "format": "date-time"
-        },
-        "lastLogin": {
-          "type": "string",
-          "description": "Timestamp of the user's last login.",
-          "format": "date-time"
         }
       },
       "required": [
         "id",
         "email",
         "name",
-        "emailVerified",
-        "createdAt"
+        "avatar"
       ]
     },
     "Device": {
@@ -83,6 +69,41 @@
         "lastLogin"
       ]
     },
+    "Chat": {
+      "title": "Chat",
+      "type": "object",
+      "description": "Represents a chat conversation between two or more users.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the chat entity."
+        },
+        "userIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "An array of user IDs participating in the chat."
+        },
+        "users": {
+          "type": "array",
+          "items": {
+            "$ref": "#/backend/entities/User"
+          },
+          "description": "An array of partial user objects for display purposes."
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp of the last activity in the chat."
+        }
+      },
+      "required": [
+        "id",
+        "userIds",
+        "users"
+      ]
+    },
     "ChatMessage": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "title": "ChatMessage",
@@ -97,11 +118,7 @@
           "type": "string",
           "description": "Reference to User. (Relationship: User 1:N ChatMessage as sender)"
         },
-        "recipientId": {
-          "type": "string",
-          "description": "Reference to User. (Relationship: User 1:N ChatMessage as recipient)"
-        },
-        "content": {
+        "text": {
           "type": "string",
           "description": "The content of the message."
         },
@@ -109,24 +126,13 @@
           "type": "string",
           "description": "Timestamp of when the message was sent.",
           "format": "date-time"
-        },
-        "isEncrypted": {
-          "type": "boolean",
-          "description": "Indicates if the message content is end-to-end encrypted."
-        },
-        "mediaUrl": {
-          "type": "string",
-          "description": "URL of the media file (image, video, voice note) attached to the message.",
-          "format": "uri"
         }
       },
       "required": [
         "id",
         "senderId",
-        "recipientId",
-        "content",
-        "timestamp",
-        "isEncrypted"
+        "text",
+        "timestamp"
       ]
     },
     "CustomAI": {
@@ -180,84 +186,40 @@
   "auth": {
     "providers": [
       "password",
-      "anonymous"
+      "anonymous",
+      "google.com"
     ]
   },
   "firestore": {
-    "structure": [
-      {
-        "path": "/users/{userId}",
-        "definition": {
-          "entityName": "User",
-          "schema": {
-            "$ref": "#/backend/entities/User"
-          },
-          "description": "Stores user profiles. Path-based ownership: User can only access their own profile.",
-          "params": [
-            {
-              "name": "userId",
-              "description": "The unique identifier of the user."
-            }
-          ]
-        }
+    "/users/{userId}": {
+      "schema": {
+        "$ref": "#/backend/entities/User"
       },
-      {
-        "path": "/users/{userId}/devices/{deviceId}",
-        "definition": {
-          "entityName": "Device",
-          "schema": {
-            "$ref": "#/backend/entities/Device"
-          },
-          "description": "Stores devices linked to a user account. Path-based ownership: User can only access their own devices.",
-          "params": [
-            {
-              "name": "userId",
-              "description": "The unique identifier of the user."
-            },
-            {
-              "name": "deviceId",
-              "description": "The unique identifier of the device."
-            }
-          ]
-        }
+      "description": "Stores public user profiles. Listable and readable by any authenticated user for discovery, but writable only by the owner."
+    },
+    "/users/{userId}/devices/{deviceId}": {
+      "schema": {
+        "$ref": "#/backend/entities/Device"
       },
-      {
-        "path": "/chatMessages/{chatMessageId}",
-        "definition": {
-          "entityName": "ChatMessage",
-          "schema": {
-            "$ref": "#/backend/entities/ChatMessage"
-          },
-          "description": "Stores chat messages. `senderId` and `recipientId` fields are present to facilitate querying messages for a specific user.",
-          "params": [
-            {
-              "name": "chatMessageId",
-              "description": "The unique identifier of the chat message."
-            }
-          ]
-        }
+      "description": "Stores devices linked to a user account. Path-based ownership: User can only access their own devices."
+    },
+    "/users/{userId}/customAIs/{customAIId}": {
+      "schema": {
+        "$ref": "#/backend/entities/CustomAI"
       },
-      {
-        "path": "/users/{userId}/customAIs/{customAIId}",
-        "definition": {
-          "entityName": "CustomAI",
-          "schema": {
-            "$ref": "#/backend/entities/CustomAI"
-          },
-          "description": "Stores custom AIs created by users. Path-based ownership: User can only access their own custom AIs.",
-          "params": [
-            {
-              "name": "userId",
-              "description": "The unique identifier of the user."
-            },
-            {
-              "name": "customAIId",
-              "description": "The unique identifier of the custom AI."
-            }
-          ]
-        }
-      }
-    ],
-    "reasoning": "The Firestore data structure is designed to ensure security, scalability, and debuggability, following the principles of Authorization Independence, Clarity of Intent, DBAC, and QAPs. Authorization independence is achieved through denormalization of authorization data. Since no collaborative features are present, the ownership is path-based, and no membership maps are used. The data structure also uses Structural Segregation by ensuring all documents in a collection share the same security requirements.\n\n*   `/users/{userId}`: Stores user profiles. This collection enforces path-based ownership. A user can only access their profile.\n*   `/users/{userId}/devices/{deviceId}`: Stores device information for multi-device linking. Access is restricted to the owning user based on the path.\n*   `/chatMessages/{chatMessageId}`: Stores all chat messages. While direct access to messages is not defined in the requirements, the structure supports QAPs and authorization rules can be added later for this collection if access to all messages is necessary, for example, for moderation purposes. The `senderId` and `recipientId` fields facilitate querying messages for a specific user.\n*   `/users/{userId}/customAIs/{customAIId}`: Stores the custom AI configurations for each user.  Access is restricted to the owning user based on the path."
+      "description": "Stores custom AIs created by users. Path-based ownership: User can only access their own custom AIs."
+    },
+    "/chats/{chatId}": {
+      "schema": {
+        "$ref": "#/backend/entities/Chat"
+      },
+      "description": "Stores metadata about a chat conversation. Only accessible by chat participants."
+    },
+    "/chats/{chatId}/messages/{messageId}": {
+      "schema": {
+        "$ref": "#/backend/entities/ChatMessage"
+      },
+      "description": "Stores the messages for a specific chat. Only accessible by chat participants."
+    }
   }
 }

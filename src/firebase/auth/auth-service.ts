@@ -41,12 +41,19 @@ export async function signUpWithEmailAndPassword(auth: Auth, email: string, pass
   
   // Update the user's profile with the display name
   await updateProfile(user, { displayName });
+  
+  // Reload the user to get the updated profile information
+  await user.reload();
+  const updatedUser = auth.currentUser;
 
-  // Save user to Firestore
-  await saveUserToFirestore(user);
+  if (updatedUser) {
+    // Save user to Firestore with updated info
+    await saveUserToFirestore(updatedUser);
+    
+    // Send verification email
+    await sendEmailVerification(updatedUser);
+  }
 
-  // Send verification email
-  await sendEmailVerification(user);
 
   return userCredential;
 }

@@ -9,18 +9,8 @@
  * - /users/{userId}: Publicly readable user profiles, writable only by the owner.
  * - /users/{userId}/devices/{deviceId}: Private device information, accessible only by the owner.
  * - /users/{userId}/customAIs/{customAIId}: Private AI configurations, accessible only by the owner.
- * - /chatMessages/{chatMessageId}: Private chat messages, accessible only by the sender or recipient.
- *
- * Key Security Decisions:
- * - User Discovery: To address the application's need for users to find each other, the `/users` collection is listable
- *   and readable by any signed-in user. Writes, however, are strictly limited to the document owner.
- * - Chat Privacy: The global `/chatMessages` collection is not listable. Access to an individual message document is
- *   granted only if the requesting user's UID is in the `senderId` or `recipientId` field of that message.
- * - Strict Ownership: All user-specific subcollections (`devices`, `customAIs`) enforce strict path-based ownership,
- *   preventing any user from accessing another's private data.
- * - Denormalization for Authorization: Chat message documents contain `senderId` and `recipientId` to allow for fast,
- *   secure access checks without needing extra database reads. User subcollection documents contain a `userId` field
- *   to ensure relational integrity with their parent user document.
+ * - /chats/{chatId}: Private chat metadata, accessible only to participants.
+ * - /chats/{chatId}/messages/{messageId}: Private chat messages, accessible only to participants of the chat.
  */
 rules_version = '2';
 service cloud.firestore {
@@ -44,74 +34,13 @@ service cloud.firestore {
     function isOwner(userId) {
       return isSignedIn() && request.auth.uid == userId;
     }
-
-    /**
-     * Returns true if the document exists and the user is the owner.
-     * Used for safe update and delete operations.
-     */
-    function isExistingOwner(userId) {
-      return isOwner(userId) && resource != null;
-    }
-
-    /**
-     * Validates that the `id` field within a new user document matches the
-     * document's ID in the path. Enforces relational integrity on creation.
-     */
-    function isCreatingOwnUserDoc(userId) {
-      return request.resource.data.id == userId;
-    }
-
-    /**
-     * Validates that the `id` field is immutable on user document updates.
-     */
-    function isUpdatingOwnUserDoc() {
-      return request.resource.data.id == resource.data.id;
-    }
-
-    /**
-     * Validates that the `userId` field within a new subcollection document
-     * matches the parent user's ID in the path.
-     */
-    function linksToOwnerOnCreate(userId) {
-      return request.resource.data.userId == userId;
-    }
-
-    /**
-     * Validates that the `userId` field is immutable on subcollection document updates.
-     */
-    function linksToOwnerOnUpdate() {
-      return request.resource.data.userId == resource.data.userId;
-    }
-
-    /**
-     * Returns true if the requesting user is the sender of the chat message being created.
-     */
-    function isSenderOnCreate() {
-      return request.auth.uid == request.resource.data.senderId;
-    }
-
-    /**
-     * Returns true if the requesting user is the sender of an existing chat message.
-     */
-    function isSender() {
-      return request.auth.uid == resource.data.senderId;
-    }
-
-    /**
-     * Returns true if the requesting user is the recipient of an existing chat message.
-     */
-    function isRecipient() {
-      return request.auth.uid == resource.data.recipientId;
-    }
     
     /**
-     * Returns true if the document exists and the user is the sender.
-     * Used for safe update and delete on chat messages.
+     * Returns true if the requesting user is a participant in the chat.
      */
-    function isExistingSender() {
-      return resource != null && isSender();
+    function isChatParticipant() {
+      return isSignedIn() && request.auth.uid in resource.data.userIds;
     }
-
 
     // ----------------------------------------------------------------------
     // Collection Rules
@@ -122,61 +51,51 @@ service cloud.firestore {
      * @path /users/{userId}
      * @allow (get, list) - Any authenticated user can read user profiles to discover other users.
      * @allow (create, update, delete) - A user can only write to their own profile document.
-     * @deny (get, list) - Unauthenticated users cannot read any user data.
-     * @deny (update) - A user `user_abc` cannot update the profile of `user_xyz`.
-     * @principle Public Read with Owner-Only Writes. Allows user discovery while protecting user data.
      */
     match /users/{userId} {
       allow get, list: if isSignedIn();
-      allow create: if isOwner(userId) && isCreatingOwnUserDoc(userId);
-      allow update: if isExistingOwner(userId) && isUpdatingOwnUserDoc();
-      allow delete: if isExistingOwner(userId);
+      allow create: if isOwner(userId);
+      allow update, delete: if isOwner(userId);
+    }
+    
+    /**
+     * @description Secures chat metadata.
+     * @path /chats/{chatId}
+     * @allow (get, list) - Only participants of the chat can read chat metadata.
+     * @allow (create) - Any signed-in user can create a chat.
+     * @allow (update, delete) - Only participants of the chat can modify or delete it.
+     */
+    match /chats/{chatId} {
+      allow get, list: if isChatParticipant();
+      allow create: if isSignedIn();
+      allow update, delete: if isChatParticipant();
+    }
+    
+    /**
+     * @description Secures messages within a chat.
+     * @path /chats/{chatId}/messages/{messageId}
+     * @allow (all) - Only participants of the parent chat can access messages.
+     */
+    match /chats/{chatId}/messages/{messageId} {
+      allow read, write: if isSignedIn() && request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.userIds;
     }
 
     /**
      * @description Secures the private device information for a user.
      * @path /users/{userId}/devices/{deviceId}
      * @allow (all) - A user can manage their own list of linked devices.
-     * @deny (all) - A user cannot access, view, or modify another user's devices.
-     * @principle Enforces strict document ownership within a user's private data tree.
      */
     match /users/{userId}/devices/{deviceId} {
-      allow get, list: if isOwner(userId);
-      allow create: if isOwner(userId) && linksToOwnerOnCreate(userId);
-      allow update: if isExistingOwner(userId) && linksToOwnerOnUpdate();
-      allow delete: if isExistingOwner(userId);
+      allow read, write, delete: if isOwner(userId);
     }
 
     /**
      * @description Secures the private Custom AI configurations for a user.
      * @path /users/{userId}/customAIs/{customAIId}
      * @allow (all) - A user can create, read, update, and delete their own custom AIs.
-     * @deny (all) - A user cannot access another user's custom AIs.
-     * @principle Enforces strict document ownership within a user's private data tree.
      */
     match /users/{userId}/customAIs/{customAIId} {
-      allow get, list: if isOwner(userId);
-      allow create: if isOwner(userId) && linksToOwnerOnCreate(userId);
-      allow update: if isExistingOwner(userId) && linksToOwnerOnUpdate();
-      allow delete: if isExistingOwner(userId);
-    }
-
-    /**
-     * @description Manages access to individual chat messages.
-     * @path /chatMessages/{chatMessageId}
-     * @allow (get) - A user can read a message if they are the sender or the recipient.
-     * @allow (create) - A user can create a message if they are the designated sender.
-     * @allow (update, delete) - Only the original sender of a message can modify or delete it.
-     * @deny (list) - No user is ever allowed to list the entire chat message collection for security.
-     * @deny (get) - A user `user_abc` cannot read a message between `user_xyz` and `user_123`.
-     * @principle Shared Access (Closed Collaborators). Access is granted based on `senderId` and `recipientId` fields.
-     */
-    match /chatMessages/{chatMessageId} {
-      allow get: if isSignedIn() && (isSender() || isRecipient());
-      allow list: if false;
-      allow create: if isSignedIn() && isSenderOnCreate();
-      allow update: if isExistingSender();
-      allow delete: if isExistingSender();
+       allow read, write, delete: if isOwner(userId);
     }
   }
 }
