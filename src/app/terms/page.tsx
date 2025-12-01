@@ -33,7 +33,7 @@ export default function TermsPage() {
             <CardTitle className="text-3xl">Terms of Service</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4 text-muted-foreground">
-            <p>Last updated: {new Date().toLocaleDateString()}</p>
+            <p>Last updated: July 26, 2024</p>
             
             <h2 className="text-xl font-semibold text-foreground pt-4">1. Acceptance of Terms</h2>
             <p>
