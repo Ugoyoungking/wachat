@@ -11,16 +11,26 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Textarea } from '@/components/ui/textarea';
 import { type Chat, type Message, type User as UserType } from '@/lib/data';
 import { cn } from '@/lib/utils';
-import { Lock, MoreVertical, Paperclip, Search, Send, MessageSquare, BellOff, Users, Phone, Video } from 'lucide-react';
+import { Lock, MoreVertical, Paperclip, Search, Send, MessageSquare, BellOff, Users, Phone, Video, ArrowLeft } from 'lucide-react';
 import { useSearchParams } from 'next/navigation';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import Image from 'next/image';
 import { VideoCall } from '@/components/video-call';
+import { useIsMobile } from '@/hooks/use-mobile';
 
-function ChatArea({ selectedChatId, currentUser }: { selectedChatId: string | null; currentUser: UserType | null; }) {
+function ChatArea({ 
+  selectedChatId, 
+  currentUser,
+  onBack
+}: { 
+  selectedChatId: string | null; 
+  currentUser: UserType | null;
+  onBack: () => void;
+}) {
   const firestore = useFirestore();
   const [isCalling, setIsCalling] = useState(false);
+  const isMobile = useIsMobile();
 
   const messagesQuery = selectedChatId
     ? query(collection(firestore, 'chats', selectedChatId, 'messages'), orderBy('timestamp', 'asc'))
@@ -86,7 +96,7 @@ function ChatArea({ selectedChatId, currentUser }: { selectedChatId: string | nu
   
   if (!selectedChatId) {
     return (
-      <div className="flex flex-col items-center justify-center h-full text-center bg-background p-8">
+      <div className="hidden md:flex flex-col items-center justify-center h-full text-center bg-background p-8">
           <Image src="https://picsum.photos/seed/windows/400/250" alt="Placeholder" width={400} height={250} className="rounded-lg" data-ai-hint="communication laptop" />
           <h2 className="mt-8 text-3xl font-light text-foreground/80">Download WaChat for Windows</h2>
           <p className="mt-4 max-w-sm text-muted-foreground">
@@ -108,6 +118,11 @@ function ChatArea({ selectedChatId, currentUser }: { selectedChatId: string | nu
   return (
     <div className="flex flex-col h-full bg-background">
       <header className="flex items-center gap-4 border-b border-sidebar-border bg-sidebar-panel-background p-4 h-16">
+        {isMobile && (
+          <Button variant="ghost" size="icon" onClick={onBack}>
+            <ArrowLeft className="h-5 w-5" />
+          </Button>
+        )}
         <Avatar>
           <AvatarImage src={userAvatar(otherUser.id) || undefined} alt={otherUser.name} />
           <AvatarFallback>{otherUser.name.charAt(0)}</AvatarFallback>
@@ -187,7 +202,7 @@ function ChatArea({ selectedChatId, currentUser }: { selectedChatId: string | nu
   )
 }
 
-function ChatListPanel({ onSelectChat }: { onSelectChat: (chatId: string) => void }) {
+function ChatListPanel({ onSelectChat, selectedChatId }: { onSelectChat: (chatId: string) => void; selectedChatId: string | null; }) {
   const { user: currentUser, isLoading: isLoadingUser } = useUser();
   const firestore = useFirestore();
 
@@ -198,15 +213,12 @@ function ChatListPanel({ onSelectChat }: { onSelectChat: (chatId: string) => voi
 
   const usersQuery = !isLoadingUser && currentUser ? query(collection(firestore, 'users')) : null;
   const { data: allUsers, isLoading: isLoadingUsersList } = useCollection<UserType>(usersQuery);
-
-  const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
   
   const searchParams = useSearchParams();
 
   useEffect(() => {
     const chatIdFromUrl = searchParams.get('chatId');
     if (chatIdFromUrl) {
-      setSelectedChatId(chatIdFromUrl);
       onSelectChat(chatIdFromUrl);
     }
   }, [searchParams, onSelectChat]);
@@ -238,12 +250,10 @@ function ChatListPanel({ onSelectChat }: { onSelectChat: (chatId: string) => voi
         });
         chatId = newChatRef.id;
     }
-    setSelectedChatId(chatId);
     onSelectChat(chatId);
   };
   
   const handleSelectChat = (chatId: string) => {
-    setSelectedChatId(chatId);
     onSelectChat(chatId);
   }
 
@@ -251,7 +261,7 @@ function ChatListPanel({ onSelectChat }: { onSelectChat: (chatId: string) => voi
   const isLoading = isLoadingUser || isLoadingChats || isLoadingUsersList;
 
   return (
-    <div className="flex flex-col h-full w-[380px] bg-sidebar-panel-background border-r border-sidebar-border">
+    <div className="flex flex-col h-full w-full md:w-[380px] bg-sidebar-panel-background border-r border-sidebar-border">
       <div className="p-4 space-y-4">
         <div className="flex justify-between items-center">
           <h1 className="text-2xl font-bold text-primary">WaChat</h1>
@@ -340,6 +350,7 @@ function ChatClientContent() {
   const searchParams = useSearchParams();
   const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
   const { user, isLoading } = useUser();
+  const isMobile = useIsMobile();
 
   useEffect(() => {
     const urlChatId = searchParams.get('chatId');
@@ -351,12 +362,32 @@ function ChatClientContent() {
   if (isLoading) {
     return <div className="flex-1 flex items-center justify-center"><p>Loading...</p></div>
   }
+  
+  if (isMobile) {
+    return (
+      <div className='w-full'>
+        {!selectedChatId ? (
+          <ChatListPanel onSelectChat={setSelectedChatId} selectedChatId={selectedChatId} />
+        ) : (
+          <ChatArea 
+            selectedChatId={selectedChatId} 
+            currentUser={user} 
+            onBack={() => setSelectedChatId(null)}
+          />
+        )}
+      </div>
+    );
+  }
 
   return (
     <>
-      <ChatListPanel onSelectChat={setSelectedChatId} />
+      <ChatListPanel onSelectChat={setSelectedChatId} selectedChatId={selectedChatId} />
       <div className="flex-1">
-        <ChatArea selectedChatId={selectedChatId} currentUser={user} />
+        <ChatArea 
+          selectedChatId={selectedChatId} 
+          currentUser={user} 
+          onBack={() => setSelectedChatId(null)}
+        />
       </div>
     </>
   );
