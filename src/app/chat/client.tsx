@@ -3,7 +3,7 @@
 
 import { useState, useEffect, FormEvent, Suspense } from 'react';
 import { collection, addDoc, serverTimestamp, query, orderBy, where, getDocs, limit, doc, getDoc } from 'firebase/firestore';
-import { useFirestore, useUser, useCollection } from '@/firebase';
+import { useFirestore, useUser, useCollection, useMemoFirebase } from '@/firebase';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -32,9 +32,9 @@ function ChatArea({
   const [isCalling, setIsCalling] = useState(false);
   const isMobile = useIsMobile();
 
-  const messagesQuery = selectedChatId
+  const messagesQuery = useMemoFirebase(() => selectedChatId
     ? query(collection(firestore, 'chats', selectedChatId, 'messages'), orderBy('timestamp', 'asc'))
-    : null;
+    : null, [selectedChatId, firestore]);
   const { data: messages, isLoading: isLoadingMessages } = useCollection<Message>(messagesQuery);
   
   const [selectedChat, setSelectedChat] = useState<Chat | null>(null);
@@ -206,12 +206,12 @@ function ChatListPanel({ onSelectChat, selectedChatId }: { onSelectChat: (chatId
   const { user: currentUser, isLoading: isLoadingUser } = useUser();
   const firestore = useFirestore();
 
-  const chatsQuery = currentUser
+  const chatsQuery = useMemoFirebase(() => currentUser
     ? query(collection(firestore, 'chats'), where('userIds', 'array-contains', currentUser.uid))
-    : null;
+    : null, [currentUser, firestore]);
   const { data: chats, isLoading: isLoadingChats } = useCollection<Chat>(chatsQuery);
 
-  const usersQuery = !isLoadingUser && currentUser ? query(collection(firestore, 'users')) : null;
+  const usersQuery = useMemoFirebase(() => !isLoadingUser && currentUser ? query(collection(firestore, 'users')) : null, [isLoadingUser, currentUser, firestore]);
   const { data: allUsers, isLoading: isLoadingUsersList } = useCollection<UserType>(usersQuery);
   
   const searchParams = useSearchParams();
