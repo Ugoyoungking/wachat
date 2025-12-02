@@ -12,7 +12,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { Laptop, Smartphone, Upload, QrCode, Loader2 } from 'lucide-react';
 import { useUser, useFirestore } from '@/firebase';
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 
 const devices = [
   { icon: <Laptop className="h-5 w-5 text-muted-foreground" />, name: 'Chrome on macOS', location: 'New York, USA', lastActive: 'Active now' },
@@ -35,7 +35,7 @@ export default function SettingsClient() {
     try {
       const token = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
       
-      const appUrl = 'https://wachat-app.vercel.app';
+      const appUrl = window.location.origin;
       const linkUrl = `${appUrl}/link?token=${token}`;
       
       setDeviceLinkQrCodeData(`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(linkUrl)}`);
@@ -52,7 +52,7 @@ export default function SettingsClient() {
     if (!user) return null;
     setIsGeneratingProfileQr(true);
     try {
-        const appUrl = 'https://wachat-app.vercel.app';
+        const appUrl = window.location.origin;
         const addFriendUrl = `${appUrl}/add?user=${user.uid}`;
         setProfileQrCodeData(`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(addFriendUrl)}`);
     } catch (error) {

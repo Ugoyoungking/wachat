@@ -72,7 +72,7 @@ function LinkProcessor() {
 export default function LinkClient() {
   return (
     <>
-      <Suspense>
+      <Suspense fallback={null}>
         <LinkProcessor />
       </Suspense>
       <div className="flex min-h-screen items-center justify-center">

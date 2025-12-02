@@ -11,13 +11,15 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Textarea } from '@/components/ui/textarea';
 import { type Chat, type Message, type User as UserType } from '@/lib/data';
 import { cn } from '@/lib/utils';
-import { Lock, MoreVertical, Paperclip, Search, Send, MessageSquare, BellOff, Users, Phone, Video, ArrowLeft } from 'lucide-react';
-import { useSearchParams } from 'next/navigation';
+import { Lock, MoreVertical, Paperclip, Search, Send, MessageSquare, BellOff, Users, Phone, Video, ArrowLeft, Loader2, MessageSquarePlus, UserSearch } from 'lucide-react';
+import { useSearchParams, useRouter } from 'next/navigation';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import Image from 'next/image';
 import { VideoCall } from '@/components/video-call';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { useToast } from '@/hooks/use-toast';
 
 function ChatArea({ 
   selectedChatId, 
@@ -202,17 +204,166 @@ function ChatArea({
   )
 }
 
+function NewChatDialog({ onChatCreated }: { onChatCreated: (chatId: string) => void }) {
+  const [email, setEmail] = useState('');
+  const [foundUser, setFoundUser] = useState<UserType | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [open, setOpen] = useState(false);
+
+  const firestore = useFirestore();
+  const { user: currentUser } = useUser();
+  const { toast } = useToast();
+
+  const handleSearch = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!email.trim() || !firestore) return;
+
+    setIsLoading(true);
+    setError(null);
+    setFoundUser(null);
+
+    try {
+      const usersRef = collection(firestore, 'users');
+      const q = query(usersRef, where('email', '==', email.trim()));
+      const querySnapshot = await getDocs(q);
+
+      if (querySnapshot.empty) {
+        setError("User not found. Please check the email address.");
+      } else {
+        const userDoc = querySnapshot.docs[0];
+        if (userDoc.id === currentUser?.uid) {
+            setError("You can't start a chat with yourself.");
+            return;
+        }
+        setFoundUser({ id: userDoc.id, ...userDoc.data() } as UserType);
+      }
+    } catch (err) {
+      setError("An error occurred while searching for the user.");
+      console.error(err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+  
+  const handleStartChat = async () => {
+    if (!foundUser || !currentUser || !firestore) return;
+    
+    setIsLoading(true);
+    try {
+        const existingChatQuery = query(
+            collection(firestore, 'chats'),
+            where('userIds', '==', [currentUser.uid, foundUser.id].sort())
+        );
+
+        const querySnapshot = await getDocs(existingChatQuery);
+
+        let chatId: string;
+        if (!querySnapshot.empty) {
+            chatId = querySnapshot.docs[0].id;
+            toast({ title: "Chat already exists", description: `Redirecting to your chat with ${foundUser.name}.`});
+        } else {
+            const usersData = [
+                { id: currentUser.uid, name: currentUser.displayName || 'Me', avatar: currentUser.photoURL },
+                { id: foundUser.id, name: foundUser.name, avatar: foundUser.avatar }
+            ];
+
+            const newChatRef = await addDoc(collection(firestore, 'chats'), {
+                userIds: [currentUser.uid, foundUser.id].sort(),
+                users: usersData,
+                timestamp: serverTimestamp()
+            });
+            chatId = newChatRef.id;
+            toast({ title: "Chat created!", description: `You can now chat with ${foundUser.name}.`});
+        }
+        onChatCreated(chatId);
+        resetState();
+    } catch (err) {
+        toast({ variant: 'destructive', title: "Error starting chat", description: "Could not create a new chat."});
+        console.error(err);
+    } finally {
+        setIsLoading(false);
+    }
+  };
+
+  const resetState = () => {
+    setEmail('');
+    setFoundUser(null);
+    setError(null);
+    setIsLoading(false);
+    setOpen(false);
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={(isOpen) => {
+      setOpen(isOpen);
+      if (!isOpen) {
+        // Reset state when closing
+        setEmail('');
+        setFoundUser(null);
+        setError(null);
+        setIsLoading(false);
+      }
+    }}>
+      <DialogTrigger asChild>
+        <Button variant="ghost" size="icon"><MessageSquarePlus className="h-5 w-5"/></Button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Start a New Chat</DialogTitle>
+          <DialogDescription>
+            Enter the email address of the user you want to chat with.
+          </DialogDescription>
+        </DialogHeader>
+        <form onSubmit={handleSearch} className="space-y-4">
+          <div className="flex gap-2">
+            <Input 
+              placeholder="user@example.com" 
+              type="email" 
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              disabled={isLoading}
+            />
+            <Button type="submit" disabled={isLoading || !email.trim()}>
+              {isLoading && !foundUser ? <Loader2 className="h-4 w-4 animate-spin"/> : <UserSearch className="h-4 w-4" />}
+              <span className="ml-2 hidden sm:inline">Find User</span>
+            </Button>
+          </div>
+        </form>
+
+        {error && <p className="text-sm text-destructive">{error}</p>}
+        
+        {foundUser && (
+            <div className="mt-4 flex flex-col items-center gap-4 rounded-lg border p-4">
+                <Avatar className="h-16 w-16">
+                    <AvatarImage src={foundUser.avatar || undefined} alt={foundUser.name} />
+                    <AvatarFallback>{foundUser.name.charAt(0)}</AvatarFallback>
+                </Avatar>
+                <div className="text-center">
+                    <p className="font-semibold">{foundUser.name}</p>
+                    <p className="text-sm text-muted-foreground">{foundUser.email}</p>
+                </div>
+                <Button onClick={handleStartChat} disabled={isLoading} className="w-full">
+                    {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin"/>}
+                    Start Chat
+                </Button>
+            </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+
 function ChatListPanel({ onSelectChat, selectedChatId }: { onSelectChat: (chatId: string) => void; selectedChatId: string | null; }) {
   const { user: currentUser, isLoading: isLoadingUser } = useUser();
   const firestore = useFirestore();
+  const router = useRouter();
 
   const chatsQuery = useMemoFirebase(() => currentUser
     ? query(collection(firestore, 'chats'), where('userIds', 'array-contains', currentUser.uid))
     : null, [currentUser, firestore]);
   const { data: chats, isLoading: isLoadingChats } = useCollection<Chat>(chatsQuery);
-
-  const usersQuery = useMemoFirebase(() => !isLoadingUser && currentUser ? query(collection(firestore, 'users')) : null, [isLoadingUser, currentUser, firestore]);
-  const { data: allUsers, isLoading: isLoadingUsersList } = useCollection<UserType>(usersQuery);
   
   const searchParams = useSearchParams();
 
@@ -223,42 +374,12 @@ function ChatListPanel({ onSelectChat, selectedChatId }: { onSelectChat: (chatId
     }
   }, [searchParams, onSelectChat]);
 
-
-  const handleSelectUser = async (user: UserType) => {
-    if (!currentUser) return;
-    
-    const existingChatQuery = query(
-        collection(firestore, 'chats'),
-        where('userIds', '==', [currentUser.uid, user.id].sort())
-    );
-
-    const querySnapshot = await getDocs(existingChatQuery);
-
-    let chatId: string;
-    if (!querySnapshot.empty) {
-        chatId = querySnapshot.docs[0].id;
-    } else {
-        const usersData = [
-            { id: currentUser.uid, name: currentUser.displayName || 'Me', avatar: currentUser.photoURL },
-            { id: user.id, name: user.name, avatar: user.avatar }
-        ];
-
-        const newChatRef = await addDoc(collection(firestore, 'chats'), {
-            userIds: [currentUser.uid, user.id].sort(),
-            users: usersData,
-            timestamp: serverTimestamp()
-        });
-        chatId = newChatRef.id;
-    }
-    onSelectChat(chatId);
-  };
-  
   const handleSelectChat = (chatId: string) => {
     onSelectChat(chatId);
+    router.push(`/chat?chatId=${chatId}`, { scroll: false });
   }
 
-  const otherUsers = allUsers?.filter(u => u.id !== currentUser?.uid);
-  const isLoading = isLoadingUser || isLoadingChats || isLoadingUsersList;
+  const isLoading = isLoadingUser || isLoadingChats;
 
   return (
     <div className="flex flex-col h-full w-full md:w-[380px] bg-sidebar-panel-background border-r border-sidebar-border">
@@ -266,13 +387,13 @@ function ChatListPanel({ onSelectChat, selectedChatId }: { onSelectChat: (chatId
         <div className="flex justify-between items-center">
           <h1 className="text-2xl font-bold text-primary">WaChat</h1>
           <div className="flex items-center gap-2">
-            <Button variant="ghost" size="icon"><Users className="h-5 w-5"/></Button>
+            <NewChatDialog onChatCreated={handleSelectChat} />
             <Button variant="ghost" size="icon"><MoreVertical className="h-5 w-5"/></Button>
           </div>
         </div>
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input placeholder="Ask Meta AI or Search" className="pl-9 bg-card" />
+          <Input placeholder="Search or start new chat" className="pl-9 bg-card" />
         </div>
         <div className="flex gap-2">
             <Button variant="secondary" size="sm" className='rounded-full'>All</Button>
@@ -315,30 +436,6 @@ function ChatListPanel({ onSelectChat, selectedChatId }: { onSelectChat: (chatId
                </button>
              )
            })}
-
-            {/* Temporary display of all users to start chat */}
-            <div className='mt-4 border-t pt-2'>
-                <p className='px-2 pb-2 text-sm font-semibold text-muted-foreground'>Start a new chat</p>
-                {isLoading && <p className='p-2 text-sm text-muted-foreground'>Loading users...</p>}
-                {!isLoading && otherUsers?.length === 0 && <p className='p-2 text-sm text-muted-foreground'>No other users found.</p>}
-                {otherUsers?.map((user) => (
-                    <button
-                      key={user.id}
-                      onClick={() => handleSelectUser(user)}
-                      className={cn(
-                        'flex w-full items-center gap-3 rounded-lg p-2 text-left transition-colors hover:bg-secondary'
-                      )}
-                    >
-                      <Avatar>
-                        <AvatarImage src={user.avatar || undefined} alt={user.name} />
-                        <AvatarFallback>{user.name.charAt(0)}</AvatarFallback>
-                      </Avatar>
-                      <div className="flex-1 truncate">
-                        <p className="font-medium">{user.name}</p>
-                      </div>
-                    </button>
-                ))}
-            </div>
         </div>
       </ScrollArea>
     </div>
@@ -351,6 +448,7 @@ function ChatClientContent() {
   const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
   const { user, isLoading } = useUser();
   const isMobile = useIsMobile();
+  const router = useRouter();
 
   useEffect(() => {
     const urlChatId = searchParams.get('chatId');
@@ -358,6 +456,16 @@ function ChatClientContent() {
       setSelectedChatId(urlChatId);
     }
   }, [searchParams]);
+
+  const handleSelectChat = (chatId: string) => {
+    setSelectedChatId(chatId);
+    router.push(`/chat?chatId=${chatId}`, { scroll: false });
+  }
+  
+  const handleBack = () => {
+    setSelectedChatId(null);
+    router.push('/chat', { scroll: false });
+  }
 
   if (isLoading) {
     return <div className="flex-1 flex items-center justify-center"><p>Loading...</p></div>
@@ -367,12 +475,12 @@ function ChatClientContent() {
     return (
       <div className='w-full'>
         {!selectedChatId ? (
-          <ChatListPanel onSelectChat={setSelectedChatId} selectedChatId={selectedChatId} />
+          <ChatListPanel onSelectChat={handleSelectChat} selectedChatId={selectedChatId} />
         ) : (
           <ChatArea 
             selectedChatId={selectedChatId} 
             currentUser={user} 
-            onBack={() => setSelectedChatId(null)}
+            onBack={handleBack}
           />
         )}
       </div>
@@ -381,12 +489,12 @@ function ChatClientContent() {
 
   return (
     <>
-      <ChatListPanel onSelectChat={setSelectedChatId} selectedChatId={selectedChatId} />
+      <ChatListPanel onSelectChat={handleSelectChat} selectedChatId={selectedChatId} />
       <div className="flex-1">
         <ChatArea 
           selectedChatId={selectedChatId} 
           currentUser={user} 
-          onBack={() => setSelectedChatId(null)}
+          onBack={handleBack}
         />
       </div>
     </>
@@ -400,7 +508,3 @@ export default function ChatClient() {
     </Suspense>
   )
 }
-
-    
-
-    
