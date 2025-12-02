@@ -96,13 +96,13 @@ function ChatArea({
   
   if (!selectedChatId) {
     return (
-      <div className="hidden md:flex flex-col items-center justify-center h-full text-center bg-background p-8">
-          <Image src="https://picsum.photos/seed/windows/400/250" alt="Placeholder" width={400} height={250} className="rounded-lg" data-ai-hint="communication laptop" />
-          <h2 className="mt-8 text-3xl font-light text-foreground/80">Download WaChat for Windows</h2>
+      <div className="hidden md:flex flex-col items-center justify-center h-full text-center bg-background p-8 border-l">
+          <Image src="https://picsum.photos/seed/wachat/300/300" alt="WaChat Web" width={300} height={300} className="rounded-full" data-ai-hint="logo encryption" />
+          <h2 className="mt-8 text-3xl font-light text-foreground/80">WaChat Web</h2>
           <p className="mt-4 max-w-sm text-muted-foreground">
-              Make calls, share your screen and get a faster experience when you download the Windows app.
+              Send and receive messages without keeping your phone online.
+              Use WaChat on up to 4 linked devices and 1 phone at the same time.
           </p>
-          <Button className="mt-6 bg-accent text-accent-foreground hover:bg-accent/90">Download</Button>
           <div className="mt-auto flex items-center gap-2 text-sm text-muted-foreground">
               <Lock className="h-4 w-4"/>
               <span>Your personal messages are end-to-end encrypted</span>
@@ -400,5 +400,7 @@ export default function ChatClient() {
     </Suspense>
   )
 }
+
+    
 
     
