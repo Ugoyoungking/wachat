@@ -171,7 +171,7 @@ function ChatArea({
   if (!selectedChatId) {
     return (
       <div className="hidden md:flex flex-col items-center justify-center h-full text-center bg-background p-8 border-l">
-          <Image src="https://picsum.photos/seed/wachat/300/300" alt="WaChat Web" width={300} height={300} className="rounded-full" data-ai-hint="logo encryption" />
+          <Image src="https://picsum.photos/seed/wachat-logo/300/300" alt="WaChat Web" width={300} height={300} className="rounded-full" data-ai-hint="logo encryption" />
           <h2 className="mt-8 text-3xl font-light text-foreground/80">WaChat Web</h2>
           <p className="mt-4 max-w-sm text-muted-foreground">
               Send and receive messages without keeping your phone online.
@@ -616,18 +616,25 @@ function ChatClientContent() {
     const urlChatId = searchParams.get('chatId');
     if (urlChatId) {
       setSelectedChatId(urlChatId);
+    } else {
+      // On mobile, if no chat is selected, ensure we are on the base /chat URL
+      if (isMobile) {
+        setSelectedChatId(null);
+      }
     }
-  }, [searchParams]);
+  }, [searchParams, isMobile]);
 
   const handleSelectChat = (chatId: string) => {
     setSelectedChatId(chatId);
-    router.push(`/chat?chatId=${chatId}`, { scroll: false });
-  }
+    if (isMobile) {
+      router.push(`/chat?chatId=${chatId}`, { scroll: false });
+    }
+  };
   
   const handleBack = () => {
     setSelectedChatId(null);
     router.push('/chat', { scroll: false });
-  }
+  };
 
   if (isLoading) {
     return <div className="flex h-screen w-full items-center justify-center"><Loader2 className="h-8 w-8 animate-spin" /></div>
@@ -635,16 +642,25 @@ function ChatClientContent() {
   
   if (isMobile) {
     return (
-      <div className='w-full h-screen'>
-        {!selectedChatId ? (
+      <div className="w-full h-screen overflow-hidden">
+        <div className={cn(
+          "w-full h-full transition-transform duration-300 ease-in-out",
+          selectedChatId ? "-translate-x-full" : "translate-x-0"
+        )}>
           <ChatListPanel onSelectChat={handleSelectChat} selectedChatId={selectedChatId} />
-        ) : (
-          <ChatArea 
-            selectedChatId={selectedChatId} 
-            currentUser={user} 
-            onBack={handleBack}
-          />
-        )}
+        </div>
+        <div className={cn(
+          "absolute top-0 left-0 w-full h-full transition-transform duration-300 ease-in-out",
+          selectedChatId ? "translate-x-0" : "translate-x-full"
+        )}>
+          {selectedChatId && (
+            <ChatArea 
+              selectedChatId={selectedChatId} 
+              currentUser={user} 
+              onBack={handleBack}
+            />
+          )}
+        </div>
       </div>
     );
   }
@@ -670,7 +686,5 @@ export default function ChatClient() {
     </Suspense>
   )
 }
-
-    
 
     
