@@ -4,7 +4,7 @@
 import { useEffect, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
-import { useUser, useFirestore } from '@/firebase';
+import { useUser, useFirestore, errorEmitter, FirestorePermissionError } from '@/firebase';
 import { Loader2, UserPlus } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { collection, query, where, getDocs, addDoc, serverTimestamp, doc, getDoc } from 'firebase/firestore';
@@ -21,8 +21,8 @@ function AddFriendProcessor() {
     const addFriend = async () => {
       const userIdToAdd = searchParams.get('user');
 
-      if (isLoading) {
-        return; // Wait until user state is determined
+      if (isLoading || !firestore) {
+        return; // Wait until user state is determined and firestore is available
       }
       
       if (!currentUser) {
@@ -56,9 +56,15 @@ function AddFriendProcessor() {
 
       // 1. Fetch the user to add
        const userToAddDocRef = doc(firestore, 'users', userIdToAdd);
-       const userToAddDoc = await getDoc(userToAddDocRef);
+       const userToAddDoc = await getDoc(userToAddDocRef).catch(err => {
+         errorEmitter.emit('permission-error', new FirestorePermissionError({
+           path: userToAddDocRef.path,
+           operation: 'get'
+         }));
+         return null;
+       });
 
-       if (!userToAddDoc.exists()) {
+       if (!userToAddDoc || !userToAddDoc.exists()) {
            toast({
              variant: 'destructive',
              title: 'User Not Found',
@@ -72,12 +78,25 @@ function AddFriendProcessor() {
 
 
       // 2. Check if a chat already exists
+      const sortedUserIds = [currentUser.uid, userIdToAdd].sort();
       const existingChatQuery = query(
         collection(firestore, 'chats'),
-        where('userIds', '==', [currentUser.uid, userIdToAdd].sort())
+        where('userIds', '==', sortedUserIds)
       );
 
-      const querySnapshot = await getDocs(existingChatQuery);
+      const querySnapshot = await getDocs(existingChatQuery).catch(err => {
+        errorEmitter.emit('permission-error', new FirestorePermissionError({
+          path: 'chats',
+          operation: 'list',
+        }));
+        return null;
+      });
+
+      if (querySnapshot === null) {
+        // Error already handled by the catch block
+        return;
+      }
+
       let chatId: string;
 
       if (!querySnapshot.empty) {
@@ -94,11 +113,27 @@ function AddFriendProcessor() {
             { id: userToAddData.id, name: userToAddData.name, avatar: userToAddData.avatar }
         ];
 
-        const newChatRef = await addDoc(collection(firestore, 'chats'), {
-            userIds: [currentUser.uid, userToAddData.id].sort(),
+        const newChatData = {
+            userIds: sortedUserIds,
             users: usersData,
             timestamp: serverTimestamp()
+        };
+
+        const newChatRef = await addDoc(collection(firestore, 'chats'), newChatData)
+        .catch(err => {
+          errorEmitter.emit('permission-error', new FirestorePermissionError({
+            path: 'chats',
+            operation: 'create',
+            requestResourceData: newChatData,
+          }));
+          return null;
         });
+
+        if (!newChatRef) {
+          // Error already handled by catch block
+          return;
+        }
+
         chatId = newChatRef.id;
         toast({
             title: 'Friend Added!',
@@ -113,8 +148,6 @@ function AddFriendProcessor() {
     addFriend();
   }, [searchParams, router, toast, firestore, currentUser, isLoading]);
 
-  // This component doesn't render anything itself, it just runs the effect.
-  // The UI is handled by the parent AddFriendClient.
   return null;
 }
 
