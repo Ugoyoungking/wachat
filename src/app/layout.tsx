@@ -1,3 +1,4 @@
+
 import type { Metadata } from 'next';
 import './globals.css';
 import { Toaster } from '@/components/ui/toaster';
@@ -192,6 +193,8 @@ export default function RootLayout({
   return (
     <html lang="en" className="dark">
       <head>
+        <meta name="google-site-verification" content="W3MpZ-n3f__nszkbbn7M_8K2F8fttcYJTqwkJrwfX8o" />
+        <meta name="msvalidate.01" content="63A610B3C9552E33F88103CB9AD8CF70" />
         <meta name="theme-color" content="#0A7CFF" />
         <link rel="alternate" hrefLang="en" href="https://wachat-app.vercel.app/" />
         <script
@@ -211,5 +214,3 @@ export default function RootLayout({
     </html>
   );
 }
-
-    
