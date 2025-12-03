@@ -3,7 +3,7 @@
 
 import { useState, useEffect, FormEvent, Suspense, useRef, useCallback } from 'react';
 import { collection, addDoc, serverTimestamp, query, orderBy, where, getDocs, limit, doc, getDoc, updateDoc, writeBatch } from 'firebase/firestore';
-import { useFirestore, useUser, useMemoFirebase } from '@/firebase';
+import { useFirestore, useUser, useMemoFirebase, useCollection } from '@/firebase';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -608,3 +608,5 @@ export default function ChatClient() {
     </Suspense>
   )
 }
+
+    
