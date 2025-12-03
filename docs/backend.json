@@ -24,6 +24,16 @@
           "type": "string",
           "description": "URL of the user's profile picture.",
           "format": "uri"
+        },
+        "status": {
+            "type": "string",
+            "enum": ["online", "offline"],
+            "description": "The user's online status."
+        },
+        "lastSeen": {
+            "type": "string",
+            "format": "date-time",
+            "description": "The last time the user was seen online."
         }
       },
       "required": [
@@ -96,6 +106,20 @@
           "type": "string",
           "format": "date-time",
           "description": "Timestamp of the last activity in the chat."
+        },
+        "typing": {
+            "type": "object",
+            "description": "Map of user IDs to boolean indicating typing status.",
+            "additionalProperties": {
+                "type": "boolean"
+            }
+        },
+        "lastMessage": {
+            "type": "object",
+            "properties": {
+                "text": { "type": "string" },
+                "timestamp": { "type": "string", "format": "date-time" }
+            }
         }
       },
       "required": [
@@ -126,13 +150,18 @@
           "type": "string",
           "description": "Timestamp of when the message was sent.",
           "format": "date-time"
+        },
+        "read": {
+            "type": "boolean",
+            "description": "Indicates if the message has been read by the recipient."
         }
       },
       "required": [
         "id",
         "senderId",
         "text",
-        "timestamp"
+        "timestamp",
+        "read"
       ]
     },
     "CustomAI": {

@@ -11,7 +11,7 @@ import {
   updateProfile,
   signInWithEmailAndPassword as firebaseSignInWithEmailAndPassword,
 } from 'firebase/auth';
-import { doc, getFirestore, setDoc } from 'firebase/firestore';
+import { doc, getFirestore, serverTimestamp, setDoc } from 'firebase/firestore';
 import { getApp } from 'firebase/app';
 
 const saveUserToFirestore = async (user: User) => {
@@ -22,6 +22,8 @@ const saveUserToFirestore = async (user: User) => {
     name: user.displayName || 'Anonymous User',
     avatar: user.photoURL || `https://i.pravatar.cc/150?u=${user.uid}`, // Fallback avatar
     email: user.email,
+    status: 'online',
+    lastSeen: serverTimestamp(),
   };
   // Use setDoc with merge to create or update the user document
   await setDoc(userRef, userData, { merge: true });
@@ -63,6 +65,11 @@ export function signInWithEmailAndPassword(auth: Auth, email: string, password: 
 }
 
 
-export function signOut(auth: Auth) {
+export async function signOut(auth: Auth) {
+  if (auth.currentUser) {
+    const firestore = getFirestore(getApp());
+    const userRef = doc(firestore, 'users', auth.currentUser.uid);
+    await setDoc(userRef, { status: 'offline', lastSeen: serverTimestamp() }, { merge: true });
+  }
   return firebaseSignOut(auth);
 }

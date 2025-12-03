@@ -6,7 +6,8 @@ export type User = {
   name: string;
   avatar: string;
   email?: string;
-  lastSeen?: string;
+  lastSeen?: Timestamp | Date | string;
+  status?: 'online' | 'offline';
 };
 
 export type Message = {
@@ -14,11 +15,16 @@ export type Message = {
   senderId: string;
   text: string;
   timestamp: Timestamp;
+  read: boolean;
 };
 
 export type Chat = {
   id: string;
   users: Partial<User>[]; // Users can be partial as we might not have all info
   userIds: string[];
-  messages?: Message[];
+  typing?: { [key: string]: boolean };
+  lastMessage?: {
+    text: string;
+    timestamp: Timestamp;
+  }
 };

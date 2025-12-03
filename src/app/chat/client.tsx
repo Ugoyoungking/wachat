@@ -1,8 +1,8 @@
 
 'use client';
 
-import { useState, useEffect, FormEvent, Suspense } from 'react';
-import { collection, addDoc, serverTimestamp, query, orderBy, where, getDocs, limit, doc, getDoc } from 'firebase/firestore';
+import { useState, useEffect, FormEvent, Suspense, useRef, useCallback } from 'react';
+import { collection, addDoc, serverTimestamp, query, orderBy, where, getDocs, limit, doc, getDoc, updateDoc, writeBatch } from 'firebase/firestore';
 import { useFirestore, useUser, useCollection, useMemoFirebase } from '@/firebase';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
@@ -11,15 +11,17 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Textarea } from '@/components/ui/textarea';
 import { type Chat, type Message, type User as UserType } from '@/lib/data';
 import { cn } from '@/lib/utils';
-import { Lock, MoreVertical, Paperclip, Search, Send, MessageSquare, BellOff, Users, Phone, Video, ArrowLeft, Loader2, MessageSquarePlus, UserSearch } from 'lucide-react';
+import { Lock, MoreVertical, Paperclip, Search, Send, MessageSquare, BellOff, Users, Phone, Video, ArrowLeft, Loader2, MessageSquarePlus, UserSearch, Check, CheckCheck } from 'lucide-react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import Image from 'next/image';
 import { VideoCall } from '@/components/video-call';
 import { useIsMobile } from '@/hooks/use-mobile';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog/dialog';
 import { useToast } from '@/hooks/use-toast';
+import { formatDistanceToNowStrict } from 'date-fns';
+import { useDoc } from '@/firebase/firestore/use-doc';
 
 function ChatArea({ 
   selectedChatId, 
@@ -34,43 +36,84 @@ function ChatArea({
   const [isCalling, setIsCalling] = useState(false);
   const isMobile = useIsMobile();
 
+  const chatDocRef = useMemoFirebase(() => selectedChatId && firestore ? doc(firestore, 'chats', selectedChatId) : null, [selectedChatId, firestore]);
+  const { data: selectedChat } = useDoc<Chat>(chatDocRef);
+  
   const messagesQuery = useMemoFirebase(() => selectedChatId
     ? query(collection(firestore, 'chats', selectedChatId, 'messages'), orderBy('timestamp', 'asc'))
     : null, [selectedChatId, firestore]);
   const { data: messages, isLoading: isLoadingMessages } = useCollection<Message>(messagesQuery);
   
-  const [selectedChat, setSelectedChat] = useState<Chat | null>(null);
-
-  useEffect(() => {
-    const fetchChat = async () => {
-        if (!selectedChatId || !firestore) return;
-        const chatDoc = await getDoc(doc(firestore, 'chats', selectedChatId));
-        if (chatDoc.exists()) {
-            setSelectedChat({ id: chatDoc.id, ...chatDoc.data() } as Chat);
-        }
-    }
-    fetchChat();
-  }, [selectedChatId, firestore]);
+  const otherUserId = selectedChat?.userIds.find(id => id !== currentUser?.uid);
+  const otherUserDocRef = useMemoFirebase(() => otherUserId && firestore ? doc(firestore, 'users', otherUserId) : null, [otherUserId, firestore]);
+  const { data: otherUser } = useDoc<UserType>(otherUserDocRef);
 
   const [message, setMessage] = useState('');
+  const scrollAreaRef = useRef<HTMLDivElement>(null);
   
-  const otherUser = selectedChat?.users.find((u) => u.id !== currentUser?.uid);
+  const isOtherUserTyping = selectedChat?.typing?.[otherUserId || ''] || false;
+  
+  // Update read status
+  useEffect(() => {
+    if (!messages || !currentUser || !firestore || !selectedChatId) return;
+  
+    const unreadMessages = messages.filter(m => m.senderId !== currentUser.uid && !m.read);
+  
+    if (unreadMessages.length > 0) {
+      const batch = writeBatch(firestore);
+      unreadMessages.forEach(message => {
+        const msgRef = doc(firestore, 'chats', selectedChatId, 'messages', message.id);
+        batch.update(msgRef, { read: true });
+      });
+      batch.commit();
+    }
+  }, [messages, currentUser, firestore, selectedChatId]);
+
+
+  useEffect(() => {
+    if (scrollAreaRef.current) {
+        // A bit of a hack to get the underlying scrollable div
+        const scrollableViewport = scrollAreaRef.current.querySelector(':scope > div');
+        if (scrollableViewport) {
+            scrollableViewport.scrollTop = scrollableViewport.scrollHeight;
+        }
+    }
+  }, [messages, isOtherUserTyping]);
 
   const handleSendMessage = async (e: FormEvent) => {
     e.preventDefault();
-    if (message.trim() === '' || !selectedChatId || !currentUser) return;
+    if (message.trim() === '' || !selectedChatId || !currentUser || !firestore) return;
 
     const messagesCol = collection(firestore, 'chats', selectedChatId, 'messages');
+    const chatRef = doc(firestore, 'chats', selectedChatId);
 
-    await addDoc(messagesCol, {
+    const messageData = {
       senderId: currentUser.uid,
       text: message.trim(),
       timestamp: serverTimestamp(),
+      read: false,
+    };
+    
+    await addDoc(messagesCol, messageData);
+    await updateDoc(chatRef, {
+        lastMessage: {
+            text: message.trim(),
+            timestamp: serverTimestamp()
+        },
+        [`typing.${currentUser.uid}`]: false
     });
 
     setMessage('');
   };
   
+  const handleTyping = (text: string) => {
+      setMessage(text);
+      if (!firestore || !selectedChatId || !currentUser) return;
+      const chatRef = doc(firestore, 'chats', selectedChatId);
+      const isTyping = text.length > 0;
+      updateDoc(chatRef, { [`typing.${currentUser.uid}`]: isTyping });
+  }
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
@@ -114,8 +157,18 @@ function ChatArea({
   }
 
   if (!otherUser) {
-    return <div className="flex-1 flex items-center justify-center"><p>Loading chat...</p></div>
+    return <div className="flex-1 flex items-center justify-center"><Loader2 className="h-8 w-8 animate-spin" /></div>
   }
+  
+  const getStatus = () => {
+    if (isOtherUserTyping) return <span className='text-primary'>typing...</span>;
+    if (otherUser?.status === 'online') return 'Online';
+    if (otherUser?.lastSeen) {
+      const lastSeenDate = (otherUser.lastSeen as any).toDate ? (otherUser.lastSeen as any).toDate() : new Date(otherUser.lastSeen as string);
+      return `Last seen ${formatDistanceToNowStrict(lastSeenDate, { addSuffix: true })}`;
+    }
+    return 'Offline';
+  };
 
   return (
     <div className="flex flex-col h-full bg-background">
@@ -127,10 +180,11 @@ function ChatArea({
         )}
         <Avatar>
           <AvatarImage src={userAvatar(otherUser.id) || undefined} alt={otherUser.name} />
-          <AvatarFallback>{otherUser.name.charAt(0)}</AvatarFallback>
+          <AvatarFallback>{otherUser.name?.charAt(0)}</AvatarFallback>
         </Avatar>
         <div className="flex-1">
           <p className="font-medium">{otherUser.name}</p>
+          <p className='text-sm text-muted-foreground'>{getStatus()}</p>
         </div>
         <Button variant="ghost" size="icon" onClick={() => setIsCalling(true)}>
           <Video className="h-5 w-5" />
@@ -142,7 +196,7 @@ function ChatArea({
           <MoreVertical className="h-5 w-5" />
         </Button>
       </header>
-      <ScrollArea className="flex-1 p-4">
+      <ScrollArea className="flex-1 p-4" ref={scrollAreaRef}>
         <div className="space-y-4">
           {isLoadingMessages && <p className='text-sm text-muted-foreground'>Loading messages...</p>}
           {messages?.map((message) => (
@@ -170,12 +224,30 @@ function ChatArea({
                 )}
               >
                 <p>{message.text}</p>
-                  <time className="text-xs text-muted-foreground/80 block mt-1 text-right">
-                    {formatTimestamp(message.timestamp)}
-                  </time>
+                 <div className="flex items-center justify-end gap-1 mt-1">
+                    <time className="text-xs text-muted-foreground/80">
+                        {formatTimestamp(message.timestamp)}
+                    </time>
+                    {message.senderId === currentUser?.uid && (
+                        message.read ? <CheckCheck className="h-4 w-4 text-accent" /> : <Check className="h-4 w-4 text-muted-foreground/80" />
+                    )}
+                 </div>
               </div>
             </div>
           ))}
+           {isOtherUserTyping && (
+             <div className="flex max-w-[75%] gap-2">
+                <Avatar className="h-8 w-8">
+                    <AvatarImage src={userAvatar(otherUserId) || undefined} />
+                    <AvatarFallback>{getAvatarFallback(otherUserId)}</AvatarFallback>
+                </Avatar>
+                <div className="rounded-lg px-3 py-2 text-sm bg-card flex items-center">
+                   <div className="h-2 w-2 bg-primary rounded-full animate-bounce [animation-delay:-0.3s]"></div>
+                   <div className="h-2 w-2 bg-primary rounded-full animate-bounce [animation-delay:-0.15s] mx-1"></div>
+                   <div className="h-2 w-2 bg-primary rounded-full animate-bounce"></div>
+                </div>
+             </div>
+           )}
         </div>
       </ScrollArea>
       <footer className="flex items-start gap-4 border-t border-sidebar-border bg-sidebar-panel-background p-4">
@@ -184,7 +256,7 @@ function ChatArea({
           className="min-h-0 flex-1 resize-none bg-card border-none focus-visible:ring-1"
           rows={1}
           value={message}
-          onChange={(e) => setMessage(e.target.value)}
+          onChange={(e) => handleTyping(e.target.value)}
           onKeyDown={handleKeyDown}
         />
         <Button variant="ghost" size="icon" type="button">
@@ -298,11 +370,7 @@ function NewChatDialog({ onChatCreated }: { onChatCreated: (chatId: string) => v
     <Dialog open={open} onOpenChange={(isOpen) => {
       setOpen(isOpen);
       if (!isOpen) {
-        // Reset state when closing
-        setEmail('');
-        setFoundUser(null);
-        setError(null);
-        setIsLoading(false);
+        resetState();
       }
     }}>
       <DialogTrigger asChild>
@@ -361,7 +429,7 @@ function ChatListPanel({ onSelectChat, selectedChatId }: { onSelectChat: (chatId
   const router = useRouter();
 
   const chatsQuery = useMemoFirebase(() => currentUser
-    ? query(collection(firestore, 'chats'), where('userIds', 'array-contains', currentUser.uid))
+    ? query(collection(firestore, 'chats'), where('userIds', 'array-contains', currentUser.uid), orderBy('lastMessage.timestamp', 'desc'))
     : null, [currentUser, firestore]);
   const { data: chats, isLoading: isLoadingChats } = useCollection<Chat>(chatsQuery);
   
@@ -373,10 +441,42 @@ function ChatListPanel({ onSelectChat, selectedChatId }: { onSelectChat: (chatId
       onSelectChat(chatIdFromUrl);
     }
   }, [searchParams, onSelectChat]);
+  
+    // Presence management
+  useEffect(() => {
+    if (!currentUser || !firestore) return;
+
+    const userRef = doc(firestore, 'users', currentUser.uid);
+
+    // Set online status
+    updateDoc(userRef, { status: 'online', lastSeen: serverTimestamp() });
+
+    // Set offline status on disconnect (best effort)
+    const handleBeforeUnload = () => {
+      // Note: This is not guaranteed to run, especially on mobile.
+      // Firestore's offline persistence helps, but a cloud function is more robust.
+      updateDoc(userRef, { status: 'offline', lastSeen: serverTimestamp() });
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      // When component unmounts (e.g., logout), set to offline
+      updateDoc(userRef, { status: 'offline', lastSeen: serverTimestamp() });
+    };
+  }, [currentUser, firestore]);
+
 
   const handleSelectChat = (chatId: string) => {
     onSelectChat(chatId);
     router.push(`/chat?chatId=${chatId}`, { scroll: false });
+  }
+  
+  const formatTimestamp = (timestamp: any) => {
+    if (!timestamp) return '';
+    const date = timestamp.toDate();
+    return formatDistanceToNowStrict(date, { addSuffix: true });
   }
 
   const isLoading = isLoadingUser || isLoadingChats;
@@ -428,10 +528,10 @@ function ChatListPanel({ onSelectChat, selectedChatId }: { onSelectChat: (chatId
                   </Avatar>
                   <div className="flex-1 truncate">
                     <p className="font-medium">{otherUser?.name}</p>
-                    <p className="text-sm text-muted-foreground">Last message...</p>
+                    <p className="text-sm text-muted-foreground">{chat.lastMessage?.text || 'No messages yet'}</p>
                   </div>
                   <div className='text-xs text-muted-foreground'>
-                      10:22 AM
+                     {chat.lastMessage?.timestamp ? formatTimestamp(chat.lastMessage.timestamp) : ''}
                   </div>
                </button>
              )
@@ -468,12 +568,12 @@ function ChatClientContent() {
   }
 
   if (isLoading) {
-    return <div className="flex-1 flex items-center justify-center"><p>Loading...</p></div>
+    return <div className="flex h-screen w-full items-center justify-center"><Loader2 className="h-8 w-8 animate-spin" /></div>
   }
   
   if (isMobile) {
     return (
-      <div className='w-full'>
+      <div className='w-full h-screen'>
         {!selectedChatId ? (
           <ChatListPanel onSelectChat={handleSelectChat} selectedChatId={selectedChatId} />
         ) : (
@@ -503,7 +603,7 @@ function ChatClientContent() {
 
 export default function ChatClient() {
   return (
-    <Suspense fallback={<div className="flex-1 flex items-center justify-center"><p>Loading Chat...</p></div>}>
+    <Suspense fallback={<div className="flex h-screen w-full items-center justify-center"><Loader2 className="h-8 w-8 animate-spin" /></div>}>
       <ChatClientContent />
     </Suspense>
   )

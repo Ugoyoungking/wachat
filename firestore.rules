@@ -1,3 +1,4 @@
+
 /**
  * Core Philosophy: This ruleset establishes a security model centered on user ownership and controlled interaction.
  * A user has full control over their own data (profile, devices, custom AIs), which is structurally segregated into a
@@ -55,7 +56,9 @@ service cloud.firestore {
     match /users/{userId} {
       allow get, list: if isSignedIn();
       allow create: if isOwner(userId);
-      allow update, delete: if isOwner(userId);
+      // Allow updates for status and lastSeen by the user themselves
+      allow update: if isOwner(userId) && (request.resource.data.keys().hasOnly(['name', 'avatar', 'status', 'lastSeen']));
+      allow delete: if isOwner(userId);
     }
     
     /**
@@ -75,9 +78,11 @@ service cloud.firestore {
      * @description Secures messages within a chat.
      * @path /chats/{chatId}/messages/{messageId}
      * @allow (all) - Only participants of the parent chat can access messages.
+     * @allow update - Allow participants to update the 'read' status.
      */
     match /chats/{chatId}/messages/{messageId} {
       allow read, write: if isSignedIn() && request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.userIds;
+      allow update: if isSignedIn() && request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.userIds && request.resource.data.keys().hasOnly(['read']);
     }
 
     /**
