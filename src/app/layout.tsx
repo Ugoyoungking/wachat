@@ -142,6 +142,7 @@ const jsonLd = {
       "url": "https://wachat-app.vercel.app/",
       "browserRequirements": "JavaScript required; modern browsers recommended (Chrome, Edge, Firefox)",
       "operatingSystem": "Web",
+      "applicationCategory": "Communication",
       "creator": { "@id": "https://wachat-app.vercel.app/#organization" }
     },
     {
