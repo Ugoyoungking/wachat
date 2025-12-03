@@ -64,12 +64,14 @@ service cloud.firestore {
     /**
      * @description Secures chat metadata.
      * @path /chats/{chatId}
-     * @allow (get, list) - Only participants of the chat can read chat metadata.
+     * @allow (get) - Only participants of the chat can read chat metadata.
+     * @allow (list) - Users can only query for chats they are a part of.
      * @allow (create) - Any signed-in user can create a chat.
      * @allow (update, delete) - Only participants of the chat can modify or delete it.
      */
     match /chats/{chatId} {
-      allow get, list: if isChatParticipant();
+      allow get: if isChatParticipant();
+      allow list: if isSignedIn() && request.query.where.get('userIds').get('array-contains') == request.auth.uid;
       allow create: if isSignedIn();
       allow update, delete: if isChatParticipant();
     }
