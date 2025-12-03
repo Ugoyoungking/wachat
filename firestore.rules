@@ -57,7 +57,7 @@ service cloud.firestore {
       allow get, list: if isSignedIn();
       allow create: if isOwner(userId);
       // Allow updates for status and lastSeen by the user themselves
-      allow update: if isOwner(userId) && (request.resource.data.keys().hasOnly(['name', 'avatar', 'status', 'lastSeen']));
+      allow update: if isOwner(userId);
       allow delete: if isOwner(userId);
     }
     
@@ -65,13 +65,13 @@ service cloud.firestore {
      * @description Secures chat metadata.
      * @path /chats/{chatId}
      * @allow (get) - Only participants of the chat can read chat metadata.
-     * @allow (list) - Users can only query for chats they are a part of.
+     * @allow (list) - Users can only query for chats they are a part of, ordered by timestamp.
      * @allow (create) - Any signed-in user can create a chat.
      * @allow (update, delete) - Only participants of the chat can modify or delete it.
      */
     match /chats/{chatId} {
       allow get: if isChatParticipant();
-      allow list: if isSignedIn() && request.query.where.get('userIds').get('array-contains') == request.auth.uid;
+      allow list: if isSignedIn() && request.query.where.get("userIds").get("array-contains") == request.auth.uid && request.query.orderBy.get("lastMessage.timestamp").direction == "desc";
       allow create: if isSignedIn();
       allow update, delete: if isChatParticipant();
     }
@@ -84,7 +84,6 @@ service cloud.firestore {
      */
     match /chats/{chatId}/messages/{messageId} {
       allow read, write: if isSignedIn() && request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.userIds;
-      allow update: if isSignedIn() && request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.userIds && request.resource.data.keys().hasOnly(['read']);
     }
 
     /**
