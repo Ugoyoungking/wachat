@@ -3,7 +3,7 @@
 
 import { useState, useEffect, FormEvent, Suspense, useRef, useCallback } from 'react';
 import { collection, addDoc, serverTimestamp, query, orderBy, where, getDocs, limit, doc, getDoc, updateDoc, writeBatch } from 'firebase/firestore';
-import { useFirestore, useUser, useMemoFirebase, useCollection } from '@/firebase';
+import { useFirestore, useUser, useMemoFirebase, errorEmitter, FirestorePermissionError } from '@/firebase';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -22,6 +22,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { useToast } from '@/hooks/use-toast';
 import { formatDistanceToNowStrict } from 'date-fns';
 import { useDoc } from '@/firebase/firestore/use-doc';
+import { useCollection } from '@/firebase/firestore/use-collection';
 
 function ChatArea({ 
   selectedChatId, 
@@ -65,7 +66,14 @@ function ChatArea({
         const msgRef = doc(firestore, 'chats', selectedChatId, 'messages', message.id);
         batch.update(msgRef, { read: true });
       });
-      batch.commit();
+      batch.commit().catch(err => {
+         // Even a batch write can fail due to permissions.
+         errorEmitter.emit('permission-error', new FirestorePermissionError({
+            path: `chats/${selectedChatId}/messages`,
+            operation: 'update',
+            requestResourceData: { read: true } // Representing the change
+         }));
+      });
     }
   }, [messages, currentUser, firestore, selectedChatId]);
 
@@ -94,13 +102,28 @@ function ChatArea({
       read: false,
     };
     
-    await addDoc(messagesCol, messageData);
-    await updateDoc(chatRef, {
+    addDoc(messagesCol, messageData).catch(err => {
+      errorEmitter.emit('permission-error', new FirestorePermissionError({
+        path: messagesCol.path,
+        operation: 'create',
+        requestResourceData: messageData
+      }));
+    });
+    
+    const lastMessageData = {
         lastMessage: {
             text: message.trim(),
             timestamp: serverTimestamp()
         },
         [`typing.${currentUser.uid}`]: false
+    };
+
+    updateDoc(chatRef, lastMessageData).catch(err => {
+        errorEmitter.emit('permission-error', new FirestorePermissionError({
+            path: chatRef.path,
+            operation: 'update',
+            requestResourceData: lastMessageData
+        }));
     });
 
     setMessage('');
@@ -111,7 +134,14 @@ function ChatArea({
       if (!firestore || !selectedChatId || !currentUser) return;
       const chatRef = doc(firestore, 'chats', selectedChatId);
       const isTyping = text.length > 0;
-      updateDoc(chatRef, { [`typing.${currentUser.uid}`]: isTyping });
+      const typingData = { [`typing.${currentUser.uid}`]: isTyping };
+      updateDoc(chatRef, typingData).catch(err => {
+        errorEmitter.emit('permission-error', new FirestorePermissionError({
+            path: chatRef.path,
+            operation: 'update',
+            requestResourceData: typingData
+        }));
+      });
   }
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -295,67 +325,88 @@ function NewChatDialog({ onChatCreated }: { onChatCreated: (chatId: string) => v
     setError(null);
     setFoundUser(null);
 
-    try {
-      const usersRef = collection(firestore, 'users');
-      const q = query(usersRef, where('email', '==', email.trim()));
-      const querySnapshot = await getDocs(q);
+    const usersRef = collection(firestore, 'users');
+    const q = query(usersRef, where('email', '==', email.trim()));
 
-      if (querySnapshot.empty) {
-        setError("User not found. Please check the email address.");
-      } else {
-        const userDoc = querySnapshot.docs[0];
-        if (userDoc.id === currentUser?.uid) {
+    getDocs(q)
+      .then(querySnapshot => {
+        if (querySnapshot.empty) {
+          setError("User not found. Please check the email address.");
+        } else {
+          const userDoc = querySnapshot.docs[0];
+          if (userDoc.id === currentUser?.uid) {
             setError("You can't start a chat with yourself.");
             return;
+          }
+          setFoundUser({ id: userDoc.id, ...userDoc.data() } as UserType);
         }
-        setFoundUser({ id: userDoc.id, ...userDoc.data() } as UserType);
-      }
-    } catch (err) {
-      setError("An error occurred while searching for the user.");
-      console.error(err);
-    } finally {
-      setIsLoading(false);
-    }
+      })
+      .catch(err => {
+        errorEmitter.emit('permission-error', new FirestorePermissionError({
+          path: 'users',
+          operation: 'list',
+        }));
+      })
+      .finally(() => {
+        setIsLoading(false);
+      });
   };
   
   const handleStartChat = async () => {
     if (!foundUser || !currentUser || !firestore) return;
     
     setIsLoading(true);
-    try {
-        const existingChatQuery = query(
-            collection(firestore, 'chats'),
-            where('userIds', '==', [currentUser.uid, foundUser.id].sort())
-        );
+    const chatsCol = collection(firestore, 'chats');
+    const existingChatQuery = query(
+      chatsCol,
+      where('userIds', '==', [currentUser.uid, foundUser.id].sort())
+    );
 
-        const querySnapshot = await getDocs(existingChatQuery);
-
+    getDocs(existingChatQuery)
+      .then(querySnapshot => {
         let chatId: string;
         if (!querySnapshot.empty) {
             chatId = querySnapshot.docs[0].id;
             toast({ title: "Chat already exists", description: `Redirecting to your chat with ${foundUser.name}.`});
+            onChatCreated(chatId);
+            resetState();
         } else {
             const usersData = [
                 { id: currentUser.uid, name: currentUser.displayName || 'Me', avatar: currentUser.photoURL },
                 { id: foundUser.id, name: foundUser.name, avatar: foundUser.avatar }
             ];
-
-            const newChatRef = await addDoc(collection(firestore, 'chats'), {
+            
+            const newChatData = {
                 userIds: [currentUser.uid, foundUser.id].sort(),
                 users: usersData,
                 timestamp: serverTimestamp()
-            });
-            chatId = newChatRef.id;
-            toast({ title: "Chat created!", description: `You can now chat with ${foundUser.name}.`});
+            };
+
+            addDoc(chatsCol, newChatData)
+              .then(newChatRef => {
+                chatId = newChatRef.id;
+                toast({ title: "Chat created!", description: `You can now chat with ${foundUser.name}.`});
+                onChatCreated(chatId);
+                resetState();
+              })
+              .catch(err => {
+                errorEmitter.emit('permission-error', new FirestorePermissionError({
+                  path: 'chats',
+                  operation: 'create',
+                  requestResourceData: newChatData
+                }));
+              });
         }
-        onChatCreated(chatId);
-        resetState();
-    } catch (err) {
-        toast({ variant: 'destructive', title: "Error starting chat", description: "Could not create a new chat."});
-        console.error(err);
-    } finally {
+      })
+      .catch(err => {
+         errorEmitter.emit('permission-error', new FirestorePermissionError({
+            path: 'chats',
+            operation: 'list',
+         }));
+      })
+      .finally(() => {
         setIsLoading(false);
-    }
+      });
   };
 
   const resetState = () => {
@@ -449,13 +500,21 @@ function ChatListPanel({ onSelectChat, selectedChatId }: { onSelectChat: (chatId
     const userRef = doc(firestore, 'users', currentUser.uid);
 
     // Set online status
-    updateDoc(userRef, { status: 'online', lastSeen: serverTimestamp() });
+    const onlineData = { status: 'online', lastSeen: serverTimestamp() };
+    updateDoc(userRef, onlineData).catch(err => {
+      errorEmitter.emit('permission-error', new FirestorePermissionError({
+        path: userRef.path,
+        operation: 'update',
+        requestResourceData: onlineData
+      }));
+    });
 
+    const offlineData = { status: 'offline', lastSeen: serverTimestamp() };
     // Set offline status on disconnect (best effort)
     const handleBeforeUnload = () => {
       // Note: This is not guaranteed to run, especially on mobile.
       // Firestore's offline persistence helps, but a cloud function is more robust.
-      updateDoc(userRef, { status: 'offline', lastSeen: serverTimestamp() });
+      updateDoc(userRef, offlineData); // This is a sync call in onbeforeunload
     };
 
     window.addEventListener('beforeunload', handleBeforeUnload);
@@ -463,7 +522,9 @@ function ChatListPanel({ onSelectChat, selectedChatId }: { onSelectChat: (chatId
     return () => {
       window.removeEventListener('beforeunload', handleBeforeUnload);
       // When component unmounts (e.g., logout), set to offline
-      updateDoc(userRef, { status: 'offline', lastSeen: serverTimestamp() });
+      updateDoc(userRef, offlineData).catch(err => {
+        // Don't emit here as it might happen during page unload.
+      });
     };
   }, [currentUser, firestore]);
 
