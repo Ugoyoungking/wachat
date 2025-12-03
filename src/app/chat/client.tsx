@@ -3,7 +3,7 @@
 
 import { useState, useEffect, FormEvent, Suspense, useRef, useCallback } from 'react';
 import { collection, addDoc, serverTimestamp, query, orderBy, where, getDocs, limit, doc, getDoc, updateDoc, writeBatch } from 'firebase/firestore';
-import { useFirestore, useUser, useMemoFirebase, errorEmitter, FirestorePermissionError } from '@/firebase';
+import { useFirestore, useUser, useMemoFirebase, errorEmitter, FirestorePermissionError, useCollection, useDoc } from '@/firebase';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -21,8 +21,7 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
 import { formatDistanceToNowStrict } from 'date-fns';
-import { useDoc } from '@/firebase/firestore/use-doc';
-import { useCollection } from '@/firebase/firestore/use-collection';
+
 
 function ChatArea({ 
   selectedChatId, 
@@ -357,9 +356,10 @@ function NewChatDialog({ onChatCreated }: { onChatCreated: (chatId: string) => v
     
     setIsLoading(true);
     const chatsCol = collection(firestore, 'chats');
+    const sortedUserIds = [currentUser.uid, foundUser.id].sort();
     const existingChatQuery = query(
       chatsCol,
-      where('userIds', '==', [currentUser.uid, foundUser.id].sort())
+      where('userIds', '==', sortedUserIds)
     );
 
     getDocs(existingChatQuery)
@@ -377,9 +377,10 @@ function NewChatDialog({ onChatCreated }: { onChatCreated: (chatId: string) => v
             ];
             
             const newChatData = {
-                userIds: [currentUser.uid, foundUser.id].sort(),
+                userIds: sortedUserIds,
                 users: usersData,
-                timestamp: serverTimestamp()
+                timestamp: serverTimestamp(),
+                lastMessage: { text: '', timestamp: null }
             };
 
             addDoc(chatsCol, newChatData)
@@ -669,5 +670,7 @@ export default function ChatClient() {
     </Suspense>
   )
 }
+
+    
 
     
