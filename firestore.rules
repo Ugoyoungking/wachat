@@ -71,7 +71,14 @@ service cloud.firestore {
      */
     match /chats/{chatId} {
       allow get: if isChatParticipant();
-      allow list: if isSignedIn() && request.query.get("where") != null && request.query.where.get("userIds") != null && request.query.where.userIds[2] == request.auth.uid && request.query.get("orderBy") != null && request.query.orderBy.get("lastMessage.timestamp") != null;
+      allow list: if isSignedIn() 
+                  && request.query.where.size() == 1
+                  && request.query.where[0].field == "userIds"
+                  && request.query.where[0].op == "array-contains"
+                  && request.query.where[0].value == request.auth.uid
+                  && request.query.orderBy.size() == 1
+                  && request.query.orderBy[0].field == "lastMessage.timestamp"
+                  && request.query.orderBy[0].direction == "desc";
       allow create: if isSignedIn();
       allow update, delete: if isChatParticipant();
     }
