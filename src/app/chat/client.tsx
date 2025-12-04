@@ -481,7 +481,7 @@ function ChatListPanel({ onSelectChat, selectedChatId }: { onSelectChat: (chatId
   const router = useRouter();
 
   const chatsQuery = useMemoFirebase(() => currentUser
-    ? query(collection(firestore, 'chats'), where('userIds', 'array-contains', currentUser.uid), orderBy('lastMessage.timestamp', 'desc'))
+    ? query(collection(firestore, 'chats'), where('userIds', 'array-contains', currentUser.uid))
     : null, [currentUser, firestore]);
   const { data: chats, isLoading: isLoadingChats } = useCollection<Chat>(chatsQuery);
   
@@ -686,5 +686,3 @@ export default function ChatClient() {
     </Suspense>
   )
 }
-
-    
