@@ -65,11 +65,15 @@ service cloud.firestore {
      * @description Secures chat metadata.
      * @path /chats/{chatId}
      * @allow (read, write) - Only participants of the chat can read or write chat metadata.
-     * @allow (list) - Users can only query for chats they are a part of.
+     * @allow (list) - Users can only query for chats they are a part of, ordered by last message timestamp.
      */
     match /chats/{chatId} {
       allow get, write: if isSignedIn() && request.auth.uid in resource.data.userIds;
-      allow list: if isSignedIn() && request.query.where[0].fieldPath == "userIds" && request.query.where[0].op == "array-contains" && request.query.where[0].value == request.auth.uid;
+      allow list: if isSignedIn() 
+                  && request.query.where[0].fieldPath == "userIds" 
+                  && request.query.where[0].op == "array-contains" 
+                  && request.query.where[0].value == request.auth.uid
+                  && request.query.orderBy[0].field == "lastMessage.timestamp";
       allow create: if isSignedIn();
     }
     
@@ -102,5 +106,3 @@ service cloud.firestore {
     }
   }
 }
-
-    

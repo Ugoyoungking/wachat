@@ -380,7 +380,7 @@ function NewChatDialog({ onChatCreated }: { onChatCreated: (chatId: string) => v
                 userIds: sortedUserIds,
                 users: usersData,
                 timestamp: serverTimestamp(),
-                lastMessage: { text: '', timestamp: null }
+                lastMessage: { text: 'Chat created.', timestamp: serverTimestamp() }
             };
 
             addDoc(chatsCol, newChatData)
@@ -481,7 +481,7 @@ function ChatListPanel({ onSelectChat, selectedChatId }: { onSelectChat: (chatId
   const router = useRouter();
 
   const chatsQuery = useMemoFirebase(() => currentUser
-    ? query(collection(firestore, 'chats'), where('userIds', 'array-contains', currentUser.uid))
+    ? query(collection(firestore, 'chats'), where('userIds', 'array-contains', currentUser.uid), orderBy('lastMessage.timestamp', 'desc'))
     : null, [currentUser, firestore]);
   const { data: chats, isLoading: isLoadingChats } = useCollection<Chat>(chatsQuery);
   
@@ -537,8 +537,12 @@ function ChatListPanel({ onSelectChat, selectedChatId }: { onSelectChat: (chatId
   
   const formatTimestamp = (timestamp: any) => {
     if (!timestamp) return '';
-    const date = timestamp.toDate();
-    return formatDistanceToNowStrict(date, { addSuffix: true });
+    try {
+      const date = timestamp.toDate();
+      return formatDistanceToNowStrict(date, { addSuffix: true });
+    } catch (e) {
+      return ''; // Return empty if timestamp is invalid
+    }
   }
 
   const isLoading = isLoadingUser || isLoadingChats;
