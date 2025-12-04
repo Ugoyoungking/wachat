@@ -230,9 +230,10 @@ function ChatArea({
   const [message, setMessage] = useState('');
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   
-  const isOtherUserTyping = selectedChat?.typing?.[otherUserId || ''] || false;
+  const isOtherUserTyping = false; // Removed feature
   
-  // Update read status
+  // Update read status - REMOVED
+  /*
   useEffect(() => {
     if (!messages || !currentUser || !firestore || !selectedChatId) return;
   
@@ -245,20 +246,19 @@ function ChatArea({
         batch.update(msgRef, { read: true });
       });
       batch.commit().catch(err => {
-         // Even a batch write can fail due to permissions.
          errorEmitter.emit('permission-error', new FirestorePermissionError({
             path: `chats/${selectedChatId}/messages`,
             operation: 'update',
-            requestResourceData: { read: true } // Representing the change
+            requestResourceData: { read: true }
          }));
       });
     }
   }, [messages, currentUser, firestore, selectedChatId]);
+  */
 
 
   useEffect(() => {
     if (scrollAreaRef.current) {
-        // A bit of a hack to get the underlying scrollable div
         const scrollableViewport = scrollAreaRef.current.querySelector(':scope > div');
         if (scrollableViewport) {
             scrollableViewport.scrollTop = scrollableViewport.scrollHeight;
@@ -271,8 +271,7 @@ function ChatArea({
     if (message.trim() === '' || !selectedChatId || !currentUser || !firestore) return;
 
     const messagesCol = collection(firestore, 'chats', selectedChatId, 'messages');
-    const chatRef = doc(firestore, 'chats', selectedChatId);
-
+    
     const messageData = {
       senderId: currentUser.uid,
       text: message.trim(),
@@ -288,38 +287,12 @@ function ChatArea({
       }));
     });
     
-    const lastMessageData = {
-        lastMessage: {
-            text: message.trim(),
-            timestamp: serverTimestamp()
-        },
-        [`typing.${currentUser.uid}`]: false
-    };
-
-    updateDoc(chatRef, lastMessageData).catch(err => {
-        errorEmitter.emit('permission-error', new FirestorePermissionError({
-            path: chatRef.path,
-            operation: 'update',
-            requestResourceData: lastMessageData
-        }));
-    });
-
     setMessage('');
   };
   
   const handleTyping = (text: string) => {
       setMessage(text);
-      if (!firestore || !selectedChatId || !currentUser) return;
-      const chatRef = doc(firestore, 'chats', selectedChatId);
-      const isTyping = text.length > 0;
-      const typingData = { [`typing.${currentUser.uid}`]: isTyping };
-      updateDoc(chatRef, typingData).catch(err => {
-        errorEmitter.emit('permission-error', new FirestorePermissionError({
-            path: chatRef.path,
-            operation: 'update',
-            requestResourceData: typingData
-        }));
-      });
+      // Typing indicator logic removed
   }
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -364,7 +337,6 @@ function ChatArea({
   }
   
   const getStatus = () => {
-    if (isOtherUserTyping) return <span className='text-primary'>typing...</span>;
     if (otherUser?.status === 'online') return 'Online';
     if (otherUser?.lastSeen) {
       const lastSeenDate = (otherUser.lastSeen as any).toDate ? (otherUser.lastSeen as any).toDate() : new Date(otherUser.lastSeen as string);
@@ -630,7 +602,7 @@ function ChatListPanel({ onSelectChat, selectedChatId }: { onSelectChat: (chatId
   const router = useRouter();
 
   const chatsQuery = useMemoFirebase(() => currentUser
-    ? query(collection(firestore, 'chats'), where('userIds', 'array-contains', currentUser.uid), orderBy('lastMessage.timestamp', 'desc'))
+    ? query(collection(firestore, 'chats'), where('userIds', 'array-contains', currentUser.uid))
     : null, [currentUser, firestore]);
   const { data: chats, isLoading: isLoadingChats } = useCollection<Chat>(chatsQuery);
   
@@ -649,7 +621,6 @@ function ChatListPanel({ onSelectChat, selectedChatId }: { onSelectChat: (chatId
 
     const userRef = doc(firestore, 'users', currentUser.uid);
 
-    // Set online status
     const onlineData = { status: 'online', lastSeen: serverTimestamp() };
     updateDoc(userRef, onlineData).catch(err => {
       errorEmitter.emit('permission-error', new FirestorePermissionError({
@@ -660,18 +631,14 @@ function ChatListPanel({ onSelectChat, selectedChatId }: { onSelectChat: (chatId
     });
 
     const offlineData = { status: 'offline', lastSeen: serverTimestamp() };
-    // Set offline status on disconnect (best effort)
     const handleBeforeUnload = () => {
-      // Note: This is not guaranteed to run, especially on mobile.
-      // Firestore's offline persistence helps, but a cloud function is more robust.
-      updateDoc(userRef, offlineData); // This is a sync call in onbeforeunload
+      updateDoc(userRef, offlineData);
     };
 
     window.addEventListener('beforeunload', handleBeforeUnload);
 
     return () => {
       window.removeEventListener('beforeunload', handleBeforeUnload);
-      // When component unmounts (e.g., logout), set to offline
       updateDoc(userRef, offlineData).catch(err => {
         // Don't emit here as it might happen during page unload.
       });
@@ -682,16 +649,6 @@ function ChatListPanel({ onSelectChat, selectedChatId }: { onSelectChat: (chatId
   const handleSelectChat = (chatId: string) => {
     onSelectChat(chatId);
     router.push(`/chat?chatId=${chatId}`, { scroll: false });
-  }
-  
-  const formatTimestamp = (timestamp: any) => {
-    if (!timestamp) return '';
-    try {
-      const date = timestamp.toDate();
-      return formatDistanceToNowStrict(date, { addSuffix: true });
-    } catch (e) {
-      return ''; // Return empty if timestamp is invalid
-    }
   }
 
   const isLoading = isLoadingUser || isLoadingChats;
@@ -743,10 +700,9 @@ function ChatListPanel({ onSelectChat, selectedChatId }: { onSelectChat: (chatId
                   </Avatar>
                   <div className="flex-1 truncate">
                     <p className="font-medium">{otherUser?.name}</p>
-                    <p className="text-sm text-muted-foreground">{chat.lastMessage?.text || 'No messages yet'}</p>
+                    <p className="text-sm text-muted-foreground">No messages yet</p>
                   </div>
                   <div className='text-xs text-muted-foreground'>
-                     {chat.lastMessage?.timestamp ? formatTimestamp(chat.lastMessage.timestamp) : ''}
                   </div>
                </button>
              )
@@ -770,7 +726,6 @@ function ChatClientContent() {
     if (urlChatId) {
       setSelectedChatId(urlChatId);
     } else {
-      // On mobile, if no chat is selected, ensure we are on the base /chat URL
       if (isMobile) {
         setSelectedChatId(null);
       }
