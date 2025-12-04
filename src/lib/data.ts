@@ -16,6 +16,7 @@ export type Message = {
   text: string;
   timestamp: Timestamp;
   read: boolean;
+  reactions?: { [emoji: string]: string[] }; // emoji: [userId, userId, ...]
 };
 
 export type Chat = {
@@ -24,7 +25,7 @@ export type Chat = {
   userIds: string[];
   typing?: { [key: string]: boolean };
   lastMessage?: {
-    text: string;
-    timestamp: Timestamp;
+    text: string | null;
+    timestamp: Timestamp | null;
   }
 };

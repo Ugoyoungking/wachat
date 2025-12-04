@@ -2,7 +2,7 @@
 'use client';
 
 import { useState, useEffect, FormEvent, Suspense, useRef, useCallback } from 'react';
-import { collection, addDoc, serverTimestamp, query, orderBy, where, getDocs, limit, doc, getDoc, updateDoc, writeBatch } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp, query, orderBy, where, getDocs, limit, doc, getDoc, updateDoc, writeBatch, deleteDoc } from 'firebase/firestore';
 import { useFirestore, useUser, useMemoFirebase, errorEmitter, FirestorePermissionError, useCollection, useDoc } from '@/firebase';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
@@ -11,7 +11,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Textarea } from '@/components/ui/textarea';
 import { type Chat, type Message, type User as UserType } from '@/lib/data';
 import { cn } from '@/lib/utils';
-import { Lock, MoreVertical, Paperclip, Search, Send, MessageSquare, BellOff, Users, Phone, Video, ArrowLeft, Loader2, MessageSquarePlus, UserSearch, Check, CheckCheck } from 'lucide-react';
+import { Lock, MoreVertical, Paperclip, Search, Send, MessageSquare, BellOff, Users, Phone, Video, ArrowLeft, Loader2, MessageSquarePlus, UserSearch, Check, CheckCheck, Smile, CornerUpLeft, Copy, Trash2, Star, MoreHorizontal, Forward } from 'lucide-react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
@@ -19,8 +19,187 @@ import Image from 'next/image';
 import { VideoCall } from '@/components/video-call';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { useToast } from '@/hooks/use-toast';
 import { formatDistanceToNowStrict } from 'date-fns';
+
+const EMOJI_REACTIONS = ['👍', '❤️', '😂', '😯', '😢', '🙏'];
+
+
+function MessageBubble({ 
+    message, 
+    isCurrentUser, 
+    userAvatar, 
+    getAvatarFallback,
+    chatId,
+    currentUser
+}: { 
+    message: Message, 
+    isCurrentUser: boolean,
+    userAvatar: (userId?: string) => string | null,
+    getAvatarFallback: (userId?: string) => string,
+    chatId: string,
+    currentUser: UserType | null
+}) {
+    const firestore = useFirestore();
+    const { toast } = useToast();
+
+    const handleReaction = async (emoji: string) => {
+        if (!firestore || !currentUser) return;
+        const messageRef = doc(firestore, 'chats', chatId, 'messages', message.id);
+        
+        const currentReactions = message.reactions || {};
+        const userList = currentReactions[emoji] || [];
+
+        let newReactions: { [emoji: string]: string[] };
+
+        if (userList.includes(currentUser.uid)) {
+            // User is removing their reaction
+            const updatedUserList = userList.filter(uid => uid !== currentUser.uid);
+            if (updatedUserList.length === 0) {
+                const { [emoji]: _, ...rest } = currentReactions;
+                newReactions = rest;
+            } else {
+                newReactions = { ...currentReactions, [emoji]: updatedUserList };
+            }
+        } else {
+            // User is adding a reaction
+            newReactions = { ...currentReactions, [emoji]: [...userList, currentUser.uid] };
+        }
+
+        const reactionData = { reactions: newReactions };
+        await updateDoc(messageRef, reactionData).catch(err => {
+            errorEmitter.emit('permission-error', new FirestorePermissionError({
+                path: messageRef.path,
+                operation: 'update',
+                requestResourceData: reactionData,
+            }));
+        });
+    };
+
+    const copyToClipboard = () => {
+        navigator.clipboard.writeText(message.text);
+        toast({ title: "Copied to clipboard" });
+    }
+    
+    const handleDeleteMessage = async () => {
+        if (!firestore) return;
+        const messageRef = doc(firestore, 'chats', chatId, 'messages', message.id);
+        await deleteDoc(messageRef).catch(err => {
+             errorEmitter.emit('permission-error', new FirestorePermissionError({
+                path: messageRef.path,
+                operation: 'delete',
+            }));
+        });
+    }
+
+    const formatTimestamp = (timestamp: any) => {
+        if (!timestamp) return '';
+        const date = timestamp.toDate();
+        return new Date(date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    };
+
+    const messageContent = (
+        <div className="group relative">
+             <div
+                className={cn(
+                    'rounded-lg px-3 py-2 text-sm break-words',
+                    isCurrentUser ? 'bg-primary text-primary-foreground' : 'bg-card'
+                )}
+            >
+                <p>{message.text}</p>
+                <div className="flex items-center justify-end gap-1 mt-1">
+                    <time className="text-xs text-muted-foreground/80">
+                        {formatTimestamp(message.timestamp)}
+                    </time>
+                    {isCurrentUser && (
+                        message.read ? <CheckCheck className="h-4 w-4 text-accent" /> : <Check className="h-4 w-4 text-muted-foreground/80" />
+                    )}
+                </div>
+            </div>
+
+            {message.reactions && Object.keys(message.reactions).length > 0 && (
+                <div className={cn(
+                    "absolute -bottom-3 flex gap-1",
+                    isCurrentUser ? "right-2" : "left-2",
+                )}>
+                    {Object.entries(message.reactions).map(([emoji, users]) => (
+                       users.length > 0 && (
+                         <div key={emoji} className="flex items-center rounded-full bg-secondary px-1.5 py-0.5 shadow-sm">
+                             <span className='text-xs'>{emoji}</span>
+                             <span className='ml-1 text-xs font-medium text-secondary-foreground'>{users.length}</span>
+                         </div>
+                       )
+                    ))}
+                </div>
+            )}
+            
+            <div className={cn(
+                "absolute top-1/2 -translate-y-1/2 items-center gap-1 rounded-full border bg-card p-1 shadow-sm opacity-0 transition-opacity group-hover:opacity-100",
+                isCurrentUser ? "-left-11" : "-right-11"
+            )}>
+                 <Popover>
+                    <PopoverTrigger asChild>
+                         <Button variant="ghost" size="icon" className="h-6 w-6"><Smile className="h-4 w-4" /></Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-1">
+                        <div className="flex gap-1">
+                            {EMOJI_REACTIONS.map(emoji => (
+                                <Button key={emoji} variant="ghost" size="icon" className="h-8 w-8 rounded-full text-lg" onClick={() => handleReaction(emoji)}>
+                                    {emoji}
+                                </Button>
+                            ))}
+                        </div>
+                    </PopoverContent>
+                </Popover>
+            </div>
+        </div>
+    );
+
+    return (
+        <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+                 <div
+                    className={cn(
+                        'flex max-w-[75%] gap-2 cursor-pointer',
+                        isCurrentUser ? 'ml-auto flex-row-reverse' : ''
+                    )}
+                >
+                    <Avatar className="h-8 w-8">
+                        <AvatarImage src={userAvatar(message.senderId) || undefined} />
+                        <AvatarFallback>{getAvatarFallback(message.senderId)}</AvatarFallback>
+                    </Avatar>
+                   {messageContent}
+                </div>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align={isCurrentUser ? 'end' : 'start'}>
+                <DropdownMenuItem>
+                    <CornerUpLeft className="mr-2 h-4 w-4" />
+                    <span>Reply</span>
+                </DropdownMenuItem>
+                 <DropdownMenuItem>
+                    <Forward className="mr-2 h-4 w-4" />
+                    <span>Forward</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={copyToClipboard}>
+                    <Copy className="mr-2 h-4 w-4" />
+                    <span>Copy</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem>
+                    <Star className="mr-2 h-4 w-4" />
+                    <span>Star</span>
+                </DropdownMenuItem>
+                {isCurrentUser && (
+                    <DropdownMenuItem className="text-destructive" onClick={handleDeleteMessage}>
+                        <Trash2 className="mr-2 h-4 w-4" />
+                        <span>Delete</span>
+                    </DropdownMenuItem>
+                )}
+            </DropdownMenuContent>
+        </DropdownMenu>
+    );
+}
 
 
 function ChatArea({ 
@@ -150,24 +329,19 @@ function ChatArea({
     }
   };
 
-  const userAvatar = (userId?: string) => {
+  const userAvatar = useCallback((userId?: string) => {
     if (!userId) return null;
     const user = selectedChat?.users.find((u) => u.id === userId);
     return user?.avatar || null;
-  }
+  }, [selectedChat]);
 
-  const getAvatarFallback = (userId?: string) => {
+  const getAvatarFallback = useCallback((userId?: string) => {
     if (!userId) return 'U';
     const user = selectedChat?.users.find((u) => u.id === userId);
     return user?.name?.charAt(0).toUpperCase() || 'U';
-  }
+  }, [selectedChat]);
 
-  const formatTimestamp = (timestamp: any) => {
-    if (!timestamp) return '';
-    const date = timestamp.toDate();
-    return new Date(date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  };
-  
+
   if (!selectedChatId) {
     return (
       <div className="hidden md:flex flex-col items-center justify-center h-full text-center bg-background p-8 border-l">
@@ -226,43 +400,18 @@ function ChatArea({
         </Button>
       </header>
       <ScrollArea className="flex-1 p-4" ref={scrollAreaRef}>
-        <div className="space-y-4">
+        <div className="space-y-6">
           {isLoadingMessages && <p className='text-sm text-muted-foreground'>Loading messages...</p>}
           {messages?.map((message) => (
-            <div
-              key={message.id}
-              className={cn(
-                'flex max-w-[75%] gap-2',
-                message.senderId === currentUser?.uid ? 'ml-auto flex-row-reverse' : ''
-              )}
-            >
-              <Avatar className="h-8 w-8">
-                  <AvatarImage
-                  src={userAvatar(message.senderId) || undefined}
-                />
-                <AvatarFallback>
-                  {getAvatarFallback(message.senderId)}
-                </AvatarFallback>
-              </Avatar>
-              <div
-                className={cn(
-                  'rounded-lg px-3 py-2 text-sm',
-                  message.senderId === currentUser?.uid
-                    ? 'bg-primary text-primary-foreground'
-                    : 'bg-card'
-                )}
-              >
-                <p>{message.text}</p>
-                 <div className="flex items-center justify-end gap-1 mt-1">
-                    <time className="text-xs text-muted-foreground/80">
-                        {formatTimestamp(message.timestamp)}
-                    </time>
-                    {message.senderId === currentUser?.uid && (
-                        message.read ? <CheckCheck className="h-4 w-4 text-accent" /> : <Check className="h-4 w-4 text-muted-foreground/80" />
-                    )}
-                 </div>
-              </div>
-            </div>
+             <MessageBubble 
+                key={message.id}
+                message={message}
+                isCurrentUser={message.senderId === currentUser?.uid}
+                userAvatar={userAvatar}
+                getAvatarFallback={getAvatarFallback}
+                chatId={selectedChatId}
+                currentUser={currentUser}
+             />
           ))}
            {isOtherUserTyping && (
              <div className="flex max-w-[75%] gap-2">
@@ -380,7 +529,7 @@ function NewChatDialog({ onChatCreated }: { onChatCreated: (chatId: string) => v
                 userIds: sortedUserIds,
                 users: usersData,
                 timestamp: serverTimestamp(),
-                lastMessage: { text: 'Chat created.', timestamp: serverTimestamp() }
+                lastMessage: { text: null, timestamp: null }
             };
 
             addDoc(chatsCol, newChatData)

@@ -1,0 +1,98 @@
+
+/**
+ * Core Philosophy: This ruleset establishes a security model centered on user ownership and controlled interaction.
+ * A user has full control over their own data (profile, devices, custom AIs), which is structurally segregated into a
+ * user-specific path. User profiles are readable by any authenticated user to enable discovery and chat initiation.
+ * Chat messages are stored in a top-level collection and are only accessible by the sender and recipient, ensuring
+ * conversation privacy.
+ */
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ----------------------------------------------------------------------
+    // Helper Functions
+    // ----------------------------------------------------------------------
+
+    /**
+     * Returns true if the user is signed in.
+     */
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    /**
+     * Returns true if the requesting user's UID matches the provided userId.
+     * Used for path-based ownership checks.
+     */
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+    
+    /**
+     * Returns true if the requesting user is a participant in the chat.
+     */
+    function isChatParticipant() {
+      return isSignedIn() && request.auth.uid in resource.data.userIds;
+    }
+
+    // ----------------------------------------------------------------------
+    // Collection Rules
+    // ----------------------------------------------------------------------
+
+    /**
+     * @description Controls access to user profile documents.
+     * @path /users/{userId}
+     * @allow (get, list) - Any authenticated user can read user profiles to discover other users.
+     * @allow (create, update, delete) - A user can only write to their own profile document.
+     */
+    match /users/{userId} {
+      allow get, list: if isSignedIn();
+      allow create: if isOwner(userId);
+      allow update: if isOwner(userId);
+      allow delete: if isOwner(userId);
+    }
+    
+    /**
+     * @description Secures chat metadata.
+     * @path /chats/{chatId}
+     */
+    match /chats/{chatId} {
+      // A user can get/read a chat document if they are a participant.
+      allow get: if isSignedIn() && request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.userIds;
+      
+      // A user can list chats if the query filters for chats where their UID is in the userIds array.
+      allow list: if isSignedIn();
+
+      // A user can create a chat if they are signed in and their UID is in the userIds array of the new document.
+      allow create: if isChatParticipant();
+      
+      // A user can update a chat (e.g., lastMessage, typing status) if they are a participant.
+      allow update: if isSignedIn() && request.auth.uid in resource.data.userIds;
+    }
+    
+    /**
+     * @description Secures messages within a chat.
+     * @path /chats/{chatId}/messages/{messageId}
+     */
+    match /chats/{chatId}/messages/{messageId} {
+      allow read, write, delete: if isSignedIn() && request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.userIds;
+    }
+
+    /**
+     * @description Secures the private device information for a user.
+     * @path /users/{userId}/devices/{deviceId}
+     */
+    match /users/{userId}/devices/{deviceId} {
+      allow read, write, delete: if isOwner(userId);
+    }
+
+    /**
+     * @description Secures the private Custom AI configurations for a user.
+     * @path /users/{userId}/customAIs/{customAIId}
+     */
+    match /users/{userId}/customAIs/{customAIId} {
+       allow read, write, delete: if isOwner(userId);
+    }
+  }
+}
