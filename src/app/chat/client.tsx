@@ -40,7 +40,7 @@ function MessageBubble({
     userAvatar: (userId?: string) => string | null,
     getAvatarFallback: (userId?: string) => string,
     chatId: string,
-    currentUser: UserType | null
+    currentUser: User | null
 }) {
     const firestore = useFirestore();
     const { toast } = useToast();
@@ -230,10 +230,9 @@ function ChatArea({
   const [message, setMessage] = useState('');
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   
-  const isOtherUserTyping = false; // Removed feature
+  const isOtherUserTyping = false; // Placeholder
   
-  // Update read status - REMOVED
-  /*
+  // Update read status for incoming messages
   useEffect(() => {
     if (!messages || !currentUser || !firestore || !selectedChatId) return;
   
@@ -254,7 +253,6 @@ function ChatArea({
       });
     }
   }, [messages, currentUser, firestore, selectedChatId]);
-  */
 
 
   useEffect(() => {
@@ -292,7 +290,7 @@ function ChatArea({
   
   const handleTyping = (text: string) => {
       setMessage(text);
-      // Typing indicator logic removed
+      // Typing indicator logic can be added here
   }
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -501,7 +499,6 @@ function NewChatDialog({ onChatCreated }: { onChatCreated: (chatId: string) => v
                 userIds: sortedUserIds,
                 users: usersData,
                 timestamp: serverTimestamp(),
-                lastMessage: { text: null, timestamp: null }
             };
 
             addDoc(chatsCol, newChatData)
@@ -615,32 +612,33 @@ function ChatListPanel({ onSelectChat, selectedChatId }: { onSelectChat: (chatId
     }
   }, [searchParams, onSelectChat]);
   
-    // Presence management
+  // Presence management for online status
   useEffect(() => {
     if (!currentUser || !firestore) return;
 
     const userRef = doc(firestore, 'users', currentUser.uid);
 
+    // Set user to online
     const onlineData = { status: 'online', lastSeen: serverTimestamp() };
     updateDoc(userRef, onlineData).catch(err => {
-      errorEmitter.emit('permission-error', new FirestorePermissionError({
-        path: userRef.path,
-        operation: 'update',
-        requestResourceData: onlineData
-      }));
+      // Non-critical, so we can just log this locally without breaking UX
+      console.error("Failed to set user online:", err);
     });
 
-    const offlineData = { status: 'offline', lastSeen: serverTimestamp() };
+    // Set user to offline on disconnect
     const handleBeforeUnload = () => {
+      const offlineData = { status: 'offline', lastSeen: serverTimestamp() };
+      // Use synchronous navigator.sendBeacon or a cloud function for reliability
       updateDoc(userRef, offlineData);
     };
-
+    
     window.addEventListener('beforeunload', handleBeforeUnload);
 
     return () => {
       window.removeEventListener('beforeunload', handleBeforeUnload);
+      const offlineData = { status: 'offline', lastSeen: serverTimestamp() };
       updateDoc(userRef, offlineData).catch(err => {
-        // Don't emit here as it might happen during page unload.
+         // Don't emit here as it might happen during page unload.
       });
     };
   }, [currentUser, firestore]);
