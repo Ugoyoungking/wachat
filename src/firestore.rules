@@ -32,8 +32,8 @@ service cloud.firestore {
     /**
      * Returns true if the requesting user is a participant in the chat.
      */
-    function isChatParticipant() {
-      return isSignedIn() && request.auth.uid in resource.data.userIds;
+    function isChatParticipant(chatDoc) {
+      return isSignedIn() && request.auth.uid in chatDoc.data.userIds;
     }
 
     // ----------------------------------------------------------------------
@@ -49,6 +49,7 @@ service cloud.firestore {
     match /users/{userId} {
       allow get, list: if isSignedIn();
       allow create: if isOwner(userId);
+      // Allow updates for status and lastSeen by the user themselves
       allow update: if isOwner(userId);
       allow delete: if isOwner(userId);
     }
@@ -58,14 +59,15 @@ service cloud.firestore {
      * @path /chats/{chatId}
      */
     match /chats/{chatId} {
-      // A user can get/read a chat document if they are a participant.
+      // A user can read a chat document if they are a participant.
       allow get: if isSignedIn() && request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.userIds;
       
-      // A user can list chats if the query filters for chats where their UID is in the userIds array.
-      allow list: if isSignedIn();
+      // A user can list chats ONLY if they are querying for their own chats.
+      // This rule enforces that the 'userIds' field must be used in a where clause.
+      allow list: if isSignedIn() && request.query.where.userIds == request.auth.uid;
 
       // A user can create a chat if they are signed in and their UID is in the userIds array of the new document.
-      allow create: if isChatParticipant();
+      allow create: if isSignedIn() && request.auth.uid in request.resource.data.userIds;
       
       // A user can update a chat (e.g., lastMessage, typing status) if they are a participant.
       allow update: if isSignedIn() && request.auth.uid in resource.data.userIds;
