@@ -16,7 +16,7 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import Image from 'next/image';
-import { VideoCall } from '@/components/video-call';
+import { AudioCall } from '@/components/audio-call';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -40,7 +40,7 @@ function MessageBubble({
     userAvatar: (userId?: string) => string | null,
     getAvatarFallback: (userId?: string) => string,
     chatId: string,
-    currentUser: User | null
+    currentUser: UserType | null
 }) {
     const firestore = useFirestore();
     const { toast } = useToast();
@@ -359,7 +359,7 @@ function ChatArea({
           <p className="font-medium">{otherUser.name}</p>
           <p className='text-sm text-muted-foreground'>{getStatus()}</p>
         </div>
-        <Button variant="ghost" size="icon" onClick={() => setIsCalling(true)}>
+        <Button variant="ghost" size="icon">
           <Video className="h-5 w-5" />
         </Button>
          <Button variant="ghost" size="icon" onClick={() => setIsCalling(true)}>
@@ -415,7 +415,7 @@ function ChatArea({
         </Button>
       </footer>
       {isCalling && otherUser && (
-        <VideoCall 
+        <AudioCall
           contact={otherUser} 
           onClose={() => setIsCalling(false)} 
         />
@@ -499,6 +499,7 @@ function NewChatDialog({ onChatCreated }: { onChatCreated: (chatId: string) => v
                 userIds: sortedUserIds,
                 users: usersData,
                 timestamp: serverTimestamp(),
+                lastMessage: { text: null, timestamp: null }
             };
 
             addDoc(chatsCol, newChatData)
@@ -599,7 +600,7 @@ function ChatListPanel({ onSelectChat, selectedChatId }: { onSelectChat: (chatId
   const router = useRouter();
 
   const chatsQuery = useMemoFirebase(() => currentUser
-    ? query(collection(firestore, 'chats'), where('userIds', 'array-contains', currentUser.uid))
+    ? query(collection(firestore, 'chats'), where('userIds', 'array-contains', currentUser.uid), orderBy('lastMessage.timestamp', 'desc'))
     : null, [currentUser, firestore]);
   const { data: chats, isLoading: isLoadingChats } = useCollection<Chat>(chatsQuery);
   
