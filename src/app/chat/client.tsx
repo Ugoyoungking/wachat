@@ -24,6 +24,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { useToast } from '@/hooks/use-toast';
 import { formatDistanceToNowStrict } from 'date-fns';
+import { motion } from 'framer-motion';
 
 const EMOJI_REACTIONS = ['👍', '❤️', '😂', '😯', '😢', '🙏'];
 
@@ -45,6 +46,8 @@ function MessageBubble({
 }) {
     const firestore = useFirestore();
     const { toast } = useToast();
+    const isMobile = useIsMobile();
+    const [isMenuOpen, setIsMenuOpen] = useState(false);
 
     const handleReaction = async (emoji: string) => {
         if (!firestore || !currentUser) return;
@@ -95,6 +98,10 @@ function MessageBubble({
         });
     }
 
+    const handleReply = () => {
+        toast({ title: "Reply action triggered!", description: `Replying to: "${message.text}"` });
+    }
+
     const formatTimestamp = (timestamp: any) => {
         if (!timestamp) return '';
         const date = timestamp.toDate();
@@ -102,7 +109,7 @@ function MessageBubble({
     };
 
     const messageContent = (
-        <div className="group relative">
+         <div className="group relative">
              <div
                 className={cn(
                     'rounded-lg px-3 py-2 text-sm break-words',
@@ -115,7 +122,7 @@ function MessageBubble({
                         {formatTimestamp(message.timestamp)}
                     </time>
                     {isCurrentUser && (
-                        message.read ? <CheckCheck className="h-4 w-4 text-accent" /> : <Check className="h-4 w-4 text-muted-foreground/80" />
+                        message.read ? <CheckCheck className="h-4 w-4 text-blue-500" /> : <Check className="h-4 w-4 text-muted-foreground/80" />
                     )}
                 </div>
             </div>
@@ -136,13 +143,89 @@ function MessageBubble({
                 </div>
             )}
             
-            <div className={cn(
-                "absolute top-1/2 -translate-y-1/2 items-center gap-1 rounded-full border bg-card p-1 shadow-sm opacity-0 transition-opacity group-hover:opacity-100",
-                isCurrentUser ? "-left-11" : "-right-11"
-            )}>
+            {!isMobile && (
+                <div className={cn(
+                    "absolute top-1/2 -translate-y-1/2 items-center gap-1 rounded-full border bg-card p-1 shadow-sm opacity-0 transition-opacity group-hover:opacity-100",
+                    isCurrentUser ? "-left-11" : "-right-11"
+                )}>
+                    <Popover>
+                        <PopoverTrigger asChild>
+                            <Button variant="ghost" size="icon" className="h-6 w-6"><Smile className="h-4 w-4" /></Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-1">
+                            <div className="flex gap-1">
+                                {EMOJI_REACTIONS.map(emoji => (
+                                    <Button key={emoji} variant="ghost" size="icon" className="h-8 w-8 rounded-full text-lg" onClick={() => handleReaction(emoji)}>
+                                        {emoji}
+                                    </Button>
+                                ))}
+                            </div>
+                        </PopoverContent>
+                    </Popover>
+                </div>
+            )}
+        </div>
+    );
+    
+     const swipeRight = {
+        x: [0, 50, 40],
+        transition: { duration: 0.3 }
+    };
+
+    return (
+        <DropdownMenu open={isMenuOpen} onOpenChange={setIsMenuOpen}>
+            <DropdownMenuTrigger asChild>
+                <div className={cn(
+                    'flex max-w-[75%] items-end gap-2',
+                    isCurrentUser ? 'ml-auto flex-row-reverse' : ''
+                )}>
+                    <Avatar className="h-8 w-8">
+                        <AvatarImage src={userAvatar(message.senderId) || undefined} />
+                        <AvatarFallback>{getAvatarFallback(message.senderId)}</AvatarFallback>
+                    </Avatar>
+
+                    <div className="relative w-full">
+                        <motion.div
+                            drag={isMobile ? "x" : false}
+                            dragConstraints={{ left: 0, right: 0 }}
+                            onDragEnd={(event, info) => {
+                                if (info.offset.x > 80 && !isCurrentUser) {
+                                    handleReply();
+                                }
+                            }}
+                            className={cn("w-full", isCurrentUser ? "ml-auto" : "")}
+                            whileTap={{ scale: isMobile ? 0.95 : 1 }}
+                            onLongPress={() => {
+                                if (isMobile) {
+                                    setIsMenuOpen(true);
+                                }
+                            }}
+                        >
+                            {messageContent}
+                        </motion.div>
+                        {!isCurrentUser && isMobile && (
+                            <div className="absolute left-[-40px] top-0 flex h-full items-center text-muted-foreground">
+                               <CornerUpLeft className="h-5 w-5" />
+                            </div>
+                        )}
+                    </div>
+                </div>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align={isCurrentUser ? 'end' : 'start'}>
+                <DropdownMenuItem onClick={handleReply}>
+                    <CornerUpLeft className="mr-2 h-4 w-4" />
+                    <span>Reply</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem>
+                    <Forward className="mr-2 h-4 w-4" />
+                    <span>Forward</span>
+                </DropdownMenuItem>
                  <Popover>
                     <PopoverTrigger asChild>
-                         <Button variant="ghost" size="icon" className="h-6 w-6"><Smile className="h-4 w-4" /></Button>
+                         <div className='relative flex cursor-default select-none items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-none transition-colors hover:bg-accent hover:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50'>
+                            <Smile className="mr-2 h-4 w-4" />
+                            <span>React</span>
+                         </div>
                     </PopoverTrigger>
                     <PopoverContent className="w-auto p-1">
                         <div className="flex gap-1">
@@ -154,35 +237,6 @@ function MessageBubble({
                         </div>
                     </PopoverContent>
                 </Popover>
-            </div>
-        </div>
-    );
-
-    return (
-        <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-                 <div
-                    className={cn(
-                        'flex max-w-[75%] gap-2 cursor-pointer',
-                        isCurrentUser ? 'ml-auto flex-row-reverse' : ''
-                    )}
-                >
-                    <Avatar className="h-8 w-8">
-                        <AvatarImage src={userAvatar(message.senderId) || undefined} />
-                        <AvatarFallback>{getAvatarFallback(message.senderId)}</AvatarFallback>
-                    </Avatar>
-                   {messageContent}
-                </div>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align={isCurrentUser ? 'end' : 'start'}>
-                <DropdownMenuItem>
-                    <CornerUpLeft className="mr-2 h-4 w-4" />
-                    <span>Reply</span>
-                </DropdownMenuItem>
-                 <DropdownMenuItem>
-                    <Forward className="mr-2 h-4 w-4" />
-                    <span>Forward</span>
-                </DropdownMenuItem>
                 <DropdownMenuItem onClick={copyToClipboard}>
                     <Copy className="mr-2 h-4 w-4" />
                     <span>Copy</span>
@@ -234,7 +288,7 @@ function ChatArea({
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   
   
-  useEffect(() => {
+   useEffect(() => {
     if (!messages || !currentUser || !firestore || !selectedChatId) return;
   
     const unreadMessages = messages.filter(m => m.senderId !== currentUser.uid && !m.read);
@@ -623,39 +677,36 @@ function ChatListPanel({ onSelectChat, selectedChatId }: { onSelectChat: (chatId
     }
   }, [searchParams, onSelectChat]);
   
-  // Presence management for online status
+   // Presence management for online status
   useEffect(() => {
     if (!currentUser || !firestore) return;
 
     const userRef = doc(firestore, 'users', currentUser.uid);
     const onlineData = { status: 'online', lastSeen: serverTimestamp() };
     updateDoc(userRef, onlineData).catch(err => {
+      // This might fail if the user is offline or if rules deny it, which is okay on startup.
       if (err.code !== 'permission-denied') {
-        console.error("Failed to set user online:", err);
+        console.error("Could not set user online status on startup:", err);
       }
     });
 
     const handleVisibilityChange = () => {
       if (!document.hidden) {
-         const onlineData = { status: 'online', lastSeen: serverTimestamp() };
-         updateDoc(userRef, onlineData).catch(err => {
-            if (err.code !== 'permission-denied') {
-                console.error("Failed to set user online on visibility change:", err);
-            }
-         });
+        updateDoc(userRef, { status: 'online', lastSeen: serverTimestamp() }).catch(err => {
+           if (err.code !== 'permission-denied') {
+             console.error("Could not set user online status on visibility change:", err);
+           }
+        });
       }
     };
     
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-
+    window.addEventListener('visibilitychange', handleVisibilityChange);
+    
+    // Set a timeout to mark as offline when the component unmounts
     return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-      const offlineData = { status: 'offline', lastSeen: serverTimestamp() };
-      updateDoc(userRef, offlineData).catch(err => {
-         // Don't emit here as it might happen during page unload.
-         if (err.code !== 'permission-denied') {
-            console.error("Failed to set user offline:", err);
-         }
+      window.removeEventListener('visibilitychange', handleVisibilityChange);
+      updateDoc(userRef, { status: 'offline', lastSeen: serverTimestamp() }).catch(err => {
+        // This might fail on page unload, which is expected. Don't log as an error.
       });
     };
   }, [currentUser, firestore]);
