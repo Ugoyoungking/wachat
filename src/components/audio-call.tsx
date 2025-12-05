@@ -11,25 +11,21 @@ import { useToast } from '@/hooks/use-toast';
 interface AudioCallProps {
   contact: Partial<User>;
   onClose: () => void;
+  ringingAudioRef: React.RefObject<HTMLAudioElement>;
 }
 
-export function AudioCall({ contact, onClose }: AudioCallProps) {
+export function AudioCall({ contact, onClose, ringingAudioRef }: AudioCallProps) {
   const { toast } = useToast();
   const [isMuted, setIsMuted] = useState(false);
   const [callStatus, setCallStatus] = useState('Ringing...');
   const [hasMicPermission, setHasMicPermission] = useState<boolean | null>(null);
   const localAudioRef = useRef<HTMLAudioElement>(null);
-  const ringingAudioRef = useRef<HTMLAudioElement>(null);
 
   useEffect(() => {
     const getMicPermission = async () => {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
         setHasMicPermission(true);
-        
-        if (ringingAudioRef.current) {
-            ringingAudioRef.current.play().catch(console.error);
-        }
         
         // In a real app, you'd attach this stream to a WebRTC peer connection
 
@@ -54,15 +50,17 @@ export function AudioCall({ contact, onClose }: AudioCallProps) {
     return () => {
       if (ringingAudioRef.current) {
         ringingAudioRef.current.pause();
+        ringingAudioRef.current.currentTime = 0;
       }
     };
-  }, [toast, onClose]);
+  }, [toast, onClose, ringingAudioRef]);
 
   // Simulate call timer and manage ringing sound
   useEffect(() => {
     if (callStatus.includes(':')) { // Call is connected
       if (ringingAudioRef.current) {
         ringingAudioRef.current.pause();
+        ringingAudioRef.current.currentTime = 0;
       }
       const timer = setInterval(() => {
         setCallStatus(prevStatus => {
@@ -75,7 +73,7 @@ export function AudioCall({ contact, onClose }: AudioCallProps) {
       }, 1000);
       return () => clearInterval(timer);
     }
-  }, [callStatus]);
+  }, [callStatus, ringingAudioRef]);
 
   const toggleMute = () => {
     // In a real implementation, you'd control the audio track's `enabled` property
@@ -119,8 +117,6 @@ export function AudioCall({ contact, onClose }: AudioCallProps) {
       </div>
       {/* Hidden audio element for local audio stream */}
       <audio ref={localAudioRef} autoPlay playsInline className="hidden" />
-      {/* Hidden audio element for ringing sound */}
-      <audio ref={ringingAudioRef} src="https://actions.google.com/sounds/v1/alarms/digital_watch_alarm_long.ogg" loop className="hidden" />
     </div>
   );
 }

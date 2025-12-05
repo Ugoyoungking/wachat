@@ -12,9 +12,10 @@ import { Alert, AlertDescription, AlertTitle } from './ui/alert';
 interface VideoCallProps {
   contact: Partial<User>;
   onClose: () => void;
+  ringingAudioRef: React.RefObject<HTMLAudioElement>;
 }
 
-export function VideoCall({ contact, onClose }: VideoCallProps) {
+export function VideoCall({ contact, onClose, ringingAudioRef }: VideoCallProps) {
   const { toast } = useToast();
   const [isMuted, setIsMuted] = useState(false);
   const [isCameraOff, setIsCameraOff] = useState(false);
@@ -22,7 +23,6 @@ export function VideoCall({ contact, onClose }: VideoCallProps) {
   const [hasPermissions, setHasPermissions] = useState<boolean | null>(null);
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
-  const ringingAudioRef = useRef<HTMLAudioElement>(null);
 
   useEffect(() => {
     const getMediaPermissions = async () => {
@@ -33,10 +33,6 @@ export function VideoCall({ contact, onClose }: VideoCallProps) {
         
         if (localVideoRef.current) {
           localVideoRef.current.srcObject = stream;
-        }
-
-        if (ringingAudioRef.current) {
-            ringingAudioRef.current.play().catch(console.error);
         }
 
         // Simulate call connection
@@ -63,14 +59,16 @@ export function VideoCall({ contact, onClose }: VideoCallProps) {
       }
       if (ringingAudioRef.current) {
         ringingAudioRef.current.pause();
+        ringingAudioRef.current.currentTime = 0;
       }
     };
-  }, [toast, onClose]);
+  }, [toast, onClose, ringingAudioRef]);
 
   useEffect(() => {
     if (callStatus.includes(':')) { // Call is connected
       if (ringingAudioRef.current) {
         ringingAudioRef.current.pause();
+        ringingAudioRef.current.currentTime = 0;
       }
       const timer = setInterval(() => {
         setCallStatus(prevStatus => {
@@ -83,7 +81,7 @@ export function VideoCall({ contact, onClose }: VideoCallProps) {
       }, 1000);
       return () => clearInterval(timer);
     }
-  }, [callStatus]);
+  }, [callStatus, ringingAudioRef]);
 
   const toggleMute = () => {
     if (streamRef.current) {
@@ -171,8 +169,6 @@ export function VideoCall({ contact, onClose }: VideoCallProps) {
           </Button>
         </div>
       </div>
-      {/* Hidden audio element for ringing sound */}
-      <audio ref={ringingAudioRef} src="https://actions.google.com/sounds/v1/alarms/digital_watch_alarm_long.ogg" loop className="hidden" />
     </div>
   );
 }

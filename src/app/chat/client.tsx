@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, FormEvent, Suspense, useRef, useCallback } from 'react';
@@ -215,6 +216,7 @@ function ChatArea({
   const [isAudioCalling, setIsAudioCalling] = useState(false);
   const [isVideoCalling, setIsVideoCalling] = useState(false);
   const isMobile = useIsMobile();
+  const ringingAudioRef = useRef<HTMLAudioElement>(null);
 
   const chatDocRef = useMemoFirebase(() => selectedChatId && firestore ? doc(firestore, 'chats', selectedChatId) : null, [selectedChatId, firestore]);
   const { data: selectedChat } = useDoc<Chat>(chatDocRef);
@@ -231,7 +233,6 @@ function ChatArea({
   const [message, setMessage] = useState('');
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   
-  const isOtherUserTyping = false; // Placeholder for typing indicator
   
   useEffect(() => {
     if (!messages || !currentUser || !firestore || !selectedChatId) return;
@@ -262,7 +263,7 @@ function ChatArea({
             scrollableViewport.scrollTop = scrollableViewport.scrollHeight;
         }
     }
-  }, [messages, isOtherUserTyping]);
+  }, [messages]);
 
   const handleSendMessage = async (e: FormEvent) => {
     e.preventDefault();
@@ -312,6 +313,19 @@ function ChatArea({
     return user?.name?.charAt(0).toUpperCase() || 'U';
   }, [selectedChat]);
 
+  const startAudioCall = () => {
+    if (ringingAudioRef.current) {
+      ringingAudioRef.current.play().catch(console.error);
+    }
+    setIsAudioCalling(true);
+  }
+
+  const startVideoCall = () => {
+    if (ringingAudioRef.current) {
+      ringingAudioRef.current.play().catch(console.error);
+    }
+    setIsVideoCalling(true);
+  }
 
   if (!selectedChatId) {
     return (
@@ -359,10 +373,10 @@ function ChatArea({
           <p className="font-medium">{otherUser.name}</p>
           <p className='text-sm text-muted-foreground'>{getStatus()}</p>
         </div>
-        <Button variant="ghost" size="icon" onClick={() => setIsVideoCalling(true)}>
+        <Button variant="ghost" size="icon" onClick={startVideoCall}>
           <Video className="h-5 w-5" />
         </Button>
-         <Button variant="ghost" size="icon" onClick={() => setIsAudioCalling(true)}>
+         <Button variant="ghost" size="icon" onClick={startAudioCall}>
           <Phone className="h-5 w-5" />
         </Button>
         <Button variant="ghost" size="icon">
@@ -383,19 +397,6 @@ function ChatArea({
                 currentUser={currentUser}
              />
           ))}
-           {isOtherUserTyping && (
-             <div className="flex max-w-[75%] gap-2">
-                <Avatar className="h-8 w-8">
-                    <AvatarImage src={userAvatar(otherUserId) || undefined} />
-                    <AvatarFallback>{getAvatarFallback(otherUserId)}</AvatarFallback>
-                </Avatar>
-                <div className="rounded-lg px-3 py-2 text-sm bg-card flex items-center">
-                   <div className="h-2 w-2 bg-primary rounded-full animate-bounce [animation-delay:-0.3s]"></div>
-                   <div className="h-2 w-2 bg-primary rounded-full animate-bounce [animation-delay:-0.15s] mx-1"></div>
-                   <div className="h-2 w-2 bg-primary rounded-full animate-bounce"></div>
-                </div>
-             </div>
-           )}
         </div>
       </ScrollArea>
       <footer className="flex items-start gap-4 border-t border-sidebar-border bg-sidebar-panel-background p-4">
@@ -418,14 +419,17 @@ function ChatArea({
         <AudioCall
           contact={otherUser} 
           onClose={() => setIsAudioCalling(false)} 
+          ringingAudioRef={ringingAudioRef}
         />
       )}
       {isVideoCalling && otherUser && (
         <VideoCall
           contact={otherUser} 
           onClose={() => setIsVideoCalling(false)} 
+          ringingAudioRef={ringingAudioRef}
         />
       )}
+      <audio ref={ringingAudioRef} src="https://actions.google.com/sounds/v1/alarms/digital_watch_alarm_long.ogg" loop className="hidden" />
     </div>
   )
 }
@@ -626,18 +630,19 @@ function ChatListPanel({ onSelectChat, selectedChatId }: { onSelectChat: (chatId
     const userRef = doc(firestore, 'users', currentUser.uid);
     const onlineData = { status: 'online', lastSeen: serverTimestamp() };
     updateDoc(userRef, onlineData).catch(err => {
-      // This might fail if the user is offline, which is fine.
-      // Non-critical, so we can just log this locally without breaking UX
-      console.error("Failed to set user online:", err);
+      if (err.code !== 'permission-denied') {
+        console.error("Failed to set user online:", err);
+      }
     });
 
     const handleVisibilityChange = () => {
-      if (document.visibilityState === 'hidden') {
-        const offlineData = { status: 'offline', lastSeen: serverTimestamp() };
-        updateDoc(userRef, offlineData);
-      } else {
+      if (!document.hidden) {
          const onlineData = { status: 'online', lastSeen: serverTimestamp() };
-         updateDoc(userRef, onlineData);
+         updateDoc(userRef, onlineData).catch(err => {
+            if (err.code !== 'permission-denied') {
+                console.error("Failed to set user online on visibility change:", err);
+            }
+         });
       }
     };
     
@@ -648,6 +653,9 @@ function ChatListPanel({ onSelectChat, selectedChatId }: { onSelectChat: (chatId
       const offlineData = { status: 'offline', lastSeen: serverTimestamp() };
       updateDoc(userRef, offlineData).catch(err => {
          // Don't emit here as it might happen during page unload.
+         if (err.code !== 'permission-denied') {
+            console.error("Failed to set user offline:", err);
+         }
       });
     };
   }, [currentUser, firestore]);
@@ -708,11 +716,11 @@ function ChatListPanel({ onSelectChat, selectedChatId }: { onSelectChat: (chatId
                   <div className="flex-1 truncate">
                     <p className="font-medium">{otherUser?.name}</p>
                     <p className="text-sm text-muted-foreground truncate">
-                      {chat.lastMessage?.text || 'No messages yet'}
+                      No messages yet
                     </p>
                   </div>
                   <div className='text-xs text-muted-foreground self-start mt-1'>
-                    {chat.lastMessage?.timestamp && formatDistanceToNowStrict(chat.lastMessage.timestamp.toDate(), { addSuffix: true })}
+                    
                   </div>
                </button>
              )
