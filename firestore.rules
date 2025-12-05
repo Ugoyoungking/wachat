@@ -5,13 +5,6 @@
  * user-specific path. User profiles are readable by any authenticated user to enable discovery and chat initiation.
  * Chat messages are stored in a top-level collection and are only accessible by the sender and recipient, ensuring
  * conversation privacy.
- *
- * Data Structure:
- * - /users/{userId}: Publicly readable user profiles, writable only by the owner.
- * - /users/{userId}/devices/{deviceId}: Private device information, accessible only by the owner.
- * - /users/{userId}/customAIs/{customAIId}: Private AI configurations, accessible only by the owner.
- * - /chats/{chatId}: Private chat metadata, accessible only to participants.
- * - /chats/{chatId}/messages/{messageId}: Private chat messages, accessible only to participants of the chat.
  */
 rules_version = '2';
 service cloud.firestore {

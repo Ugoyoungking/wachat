@@ -2,7 +2,7 @@
 'use client';
 
 import { useState, useEffect, FormEvent, Suspense, useRef, useCallback } from 'react';
-import { collection, addDoc, serverTimestamp, query, orderBy, where, getDocs, limit, doc, getDoc, updateDoc, writeBatch, deleteDoc, increment } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp, query, orderBy, where, getDocs, limit, doc, getDoc, updateDoc, writeBatch, deleteDoc } from 'firebase/firestore';
 import { useFirestore, useUser, useMemoFirebase, errorEmitter, FirestorePermissionError, useCollection, useDoc } from '@/firebase';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
@@ -293,32 +293,26 @@ function ChatArea({
   
   
    useEffect(() => {
-    if (!messages || !currentUser || !firestore || !selectedChatId || !chatDocRef) return;
+    if (!messages || !currentUser || !firestore || !selectedChatId) return;
   
     const unreadMessages = messages.filter(m => m.senderId !== currentUser.uid && !m.read);
   
     if (unreadMessages.length > 0) {
       const batch = writeBatch(firestore);
-      // Mark messages as read
       unreadMessages.forEach(message => {
         const msgRef = doc(firestore, 'chats', selectedChatId, 'messages', message.id);
         batch.update(msgRef, { read: true });
       });
 
-      // Reset user's unread count for this chat
-      const chatUpdateData: { [key: string]: any } = {};
-      chatUpdateData[`unreadCount.${currentUser.uid}`] = 0;
-      batch.update(chatDocRef, chatUpdateData);
-
       batch.commit().catch(err => {
          errorEmitter.emit('permission-error', new FirestorePermissionError({
             path: `chats/${selectedChatId}`,
             operation: 'update',
-            requestResourceData: { read: true, unreadCount: 0 }
+            requestResourceData: { read: true }
          }));
       });
     }
-  }, [messages, currentUser, firestore, selectedChatId, chatDocRef]);
+  }, [messages, currentUser, firestore, selectedChatId]);
 
 
   useEffect(() => {
@@ -332,49 +326,26 @@ function ChatArea({
 
   const handleSendMessage = async (e: FormEvent) => {
     e.preventDefault();
-    if (message.trim() === '' || !selectedChatId || !currentUser || !firestore || !otherUserId || !chatDocRef) return;
-
-    const currentMessage = message.trim();
-    setMessage(''); // Clear input immediately
+    if (message.trim() === '' || !selectedChatId || !currentUser || !firestore) return;
 
     const messagesCol = collection(firestore, 'chats', selectedChatId, 'messages');
     
     const messageData = {
       senderId: currentUser.uid,
-      text: currentMessage,
+      text: message.trim(),
       timestamp: serverTimestamp(),
       read: false,
     };
     
-    const newMessageRef = doc(messagesCol); // Create a new doc ref to get ID
-
-    try {
-        const batch = writeBatch(firestore);
-
-        // 1. Add the new message
-        batch.set(newMessageRef, messageData);
-
-        // 2. Update the parent chat document
-        const chatUpdateData: { [key: string]: any } = {
-            lastMessage: {
-                text: currentMessage,
-                timestamp: serverTimestamp(),
-            },
-        };
-        // Increment unread count for the other user
-        chatUpdateData[`unreadCount.${otherUserId}`] = increment(1);
-        
-        batch.update(chatDocRef, chatUpdateData);
-
-        await batch.commit();
-
-    } catch (err) {
-       errorEmitter.emit('permission-error', new FirestorePermissionError({
-            path: `chats/${selectedChatId}`,
-            operation: 'write',
-            requestResourceData: { message: messageData, chatUpdate: '...' }
-        }));
-    }
+    setMessage('');
+    
+    await addDoc(messagesCol, messageData).catch(err => {
+      errorEmitter.emit('permission-error', new FirestorePermissionError({
+        path: messagesCol.path,
+        operation: 'create',
+        requestResourceData: messageData
+      }))
+    })
   };
   
   const handleTyping = (text: string) => {
@@ -597,8 +568,6 @@ function NewChatDialog({ onChatCreated }: { onChatCreated: (chatId: string) => v
                 userIds: sortedUserIds,
                 users: usersData,
                 timestamp: serverTimestamp(),
-                lastMessage: { text: null, timestamp: serverTimestamp() },
-                unreadCount: { [currentUser.uid]: 0, [foundUser.id]: 0 }
             };
 
             addDoc(chatsCol, newChatData)
@@ -701,8 +670,7 @@ function ChatListPanel({ onSelectChat, selectedChatId }: { onSelectChat: (chatId
   const chatsQuery = useMemoFirebase(() => currentUser
     ? query(
         collection(firestore, 'chats'), 
-        where('userIds', 'array-contains', currentUser.uid),
-        orderBy('lastMessage.timestamp', 'desc')
+        where('userIds', 'array-contains', currentUser.uid)
       )
     : null, [currentUser, firestore]);
   const { data: chats, isLoading: isLoadingChats } = useCollection<Chat>(chatsQuery);
@@ -723,7 +691,6 @@ function ChatListPanel({ onSelectChat, selectedChatId }: { onSelectChat: (chatId
     const userRef = doc(firestore, 'users', currentUser.uid);
     const onlineData = { status: 'online', lastSeen: serverTimestamp() };
     updateDoc(userRef, onlineData).catch(err => {
-      // This might fail if the user is offline or if rules deny it, which is okay on startup.
       if (err.code !== 'permission-denied') {
         console.error("Could not set user online status on startup:", err);
       }
@@ -741,12 +708,8 @@ function ChatListPanel({ onSelectChat, selectedChatId }: { onSelectChat: (chatId
     
     window.addEventListener('visibilitychange', handleVisibilityChange);
     
-    // Set a timeout to mark as offline when the component unmounts
     return () => {
       window.removeEventListener('visibilitychange', handleVisibilityChange);
-      updateDoc(userRef, { status: 'offline', lastSeen: serverTimestamp() }).catch(err => {
-        // This might fail on page unload, which is expected. Don't log as an error.
-      });
     };
   }, [currentUser, firestore]);
 
@@ -757,11 +720,6 @@ function ChatListPanel({ onSelectChat, selectedChatId }: { onSelectChat: (chatId
   }
 
   const isLoading = isLoadingUser || isLoadingChats;
-  
-  const formatTimestamp = (timestamp: any) => {
-    if (!timestamp) return '';
-    return formatDistanceToNowStrict(timestamp.toDate(), { addSuffix: true });
-  }
 
   return (
     <div className="flex flex-col h-full w-full md:w-[380px] bg-sidebar-panel-background border-r border-sidebar-border">
@@ -795,7 +753,6 @@ function ChatListPanel({ onSelectChat, selectedChatId }: { onSelectChat: (chatId
            {isLoading && <p className='p-2 text-sm text-muted-foreground'>Loading chats...</p>}
            {!isLoading && chats?.map((chat) => {
              const otherUser = chat.users.find(u => u.id !== currentUser?.uid);
-             const unreadCount = currentUser ? chat.unreadCount?.[currentUser.uid] : 0;
              return (
                <button
                   key={chat.id}
@@ -812,14 +769,8 @@ function ChatListPanel({ onSelectChat, selectedChatId }: { onSelectChat: (chatId
                   <div className="flex-1 truncate">
                     <p className="font-medium">{otherUser?.name}</p>
                     <p className="text-sm text-muted-foreground truncate">
-                      {chat.lastMessage?.text || 'No messages yet'}
+                      No messages yet
                     </p>
-                  </div>
-                  <div className='flex flex-col items-end gap-1 text-xs text-muted-foreground self-start mt-1'>
-                    <span>{formatTimestamp(chat.lastMessage?.timestamp)}</span>
-                    {unreadCount && unreadCount > 0 ? (
-                       <Badge className='h-5 w-5 flex items-center justify-center p-0 bg-accent text-accent-foreground'>{unreadCount}</Badge>
-                    ) : <div className="h-5 w-5" />}
                   </div>
                </button>
              )
@@ -911,5 +862,3 @@ export default function ChatClient() {
     </Suspense>
   )
 }
-
-    
