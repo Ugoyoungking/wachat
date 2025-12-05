@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Logo } from '@/components/logo';
 import { ArrowRight, CheckCircle2, ShieldCheck, Zap } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 function LandingPage() {
   const features = [
@@ -76,7 +77,7 @@ function LandingPage() {
             <h2 className="text-center text-3xl font-bold">Why WaChat?</h2>
             <div className="mt-12 grid gap-8 md:grid-cols-3">
               {features.map((feature, index) => (
-                <Card key={index}>
+                <Card key={index} className="transition-all duration-300 hover:shadow-lg hover:-translate-y-1">
                   <CardHeader className="flex flex-col items-center text-center">
                     {feature.icon}
                     <CardTitle className="mt-4">{feature.title}</CardTitle>
