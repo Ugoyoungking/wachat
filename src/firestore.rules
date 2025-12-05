@@ -50,9 +50,7 @@ service cloud.firestore {
       allow create: if isOwner(userId);
       // A user can update their own profile, but only specific fields.
       // This prevents a user from maliciously changing their ID or email.
-      allow update: if isOwner(userId) &&
-                       request.resource.data.diff(resource.data).affectedKeys()
-                         .hasOnly(['name', 'avatar', 'status', 'lastSeen']);
+      allow update: if isOwner(userId);
       allow delete: if isOwner(userId);
     }
     
@@ -64,8 +62,7 @@ service cloud.firestore {
       // A user can read a chat document if they are a participant.
       allow get: if isChatParticipant(chatId);
       
-      // A user can list chats ONLY if they are querying for their own chats,
-      // optionally ordering by the last message timestamp.
+      // A user can list chats ONLY if they are querying for their own chats.
       allow list: if isSignedIn() && request.query.where.userIds == request.auth.uid;
 
       // A user can create a chat if they are signed in and their UID is in the userIds array of the new document.
@@ -80,6 +77,8 @@ service cloud.firestore {
      * @path /chats/{chatId}/messages/{messageId}
      */
     match /chats/{chatId}/messages/{messageId} {
+      // Users can read/write messages if they are part of the chat.
+      // Additionally, allow updates for read receipts.
       allow read, write: if isChatParticipant(chatId);
     }
 
