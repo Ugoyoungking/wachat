@@ -108,6 +108,14 @@ function MessageBubble({
         return new Date(date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     };
 
+    const handleContextMenu = (e: React.MouseEvent) => {
+        if (isMobile) {
+            e.preventDefault();
+            setIsMenuOpen(true);
+        }
+    };
+
+
     const messageContent = (
          <div className="group relative">
              <div
@@ -195,11 +203,7 @@ function MessageBubble({
                             }}
                             className={cn("w-full", isCurrentUser ? "ml-auto" : "")}
                             whileTap={{ scale: isMobile ? 0.95 : 1 }}
-                            onLongPress={() => {
-                                if (isMobile) {
-                                    setIsMenuOpen(true);
-                                }
-                            }}
+                            onContextMenu={handleContextMenu}
                         >
                             {messageContent}
                         </motion.div>
@@ -332,7 +336,7 @@ function ChatArea({
       read: false,
     };
     
-    await addDoc(messagesCol, messageData).catch(err => {
+    addDoc(messagesCol, messageData).catch(err => {
       errorEmitter.emit('permission-error', new FirestorePermissionError({
         path: messagesCol.path,
         operation: 'create',
@@ -863,3 +867,5 @@ export default function ChatClient() {
     </Suspense>
   )
 }
+
+    
