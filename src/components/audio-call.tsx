@@ -19,6 +19,7 @@ export function AudioCall({ contact, onClose }: AudioCallProps) {
   const [callStatus, setCallStatus] = useState('Ringing...');
   const [hasMicPermission, setHasMicPermission] = useState<boolean | null>(null);
   const localAudioRef = useRef<HTMLAudioElement>(null);
+  const ringingAudioRef = useRef<HTMLAudioElement>(null);
 
   useEffect(() => {
     const getMicPermission = async () => {
@@ -26,11 +27,16 @@ export function AudioCall({ contact, onClose }: AudioCallProps) {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
         setHasMicPermission(true);
         
+        if (ringingAudioRef.current) {
+            ringingAudioRef.current.play().catch(console.error);
+        }
+        
         // In a real app, you'd attach this stream to a WebRTC peer connection
-        // For this UI demo, we don't need to play the local audio.
 
         // Simulate call connection
-        setTimeout(() => setCallStatus('00:05'), 2000); // Simulate connection after 2s
+        const connectTimer = setTimeout(() => setCallStatus('00:05'), 5000); 
+        
+        return () => clearTimeout(connectTimer);
       } catch (error) {
         console.error('Error accessing media devices:', error);
         setHasMicPermission(false);
@@ -45,15 +51,19 @@ export function AudioCall({ contact, onClose }: AudioCallProps) {
 
     getMicPermission();
     
-    // Cleanup function to stop media tracks
     return () => {
-      // In a real app, you would clean up the WebRTC connection here.
+      if (ringingAudioRef.current) {
+        ringingAudioRef.current.pause();
+      }
     };
   }, [toast, onClose]);
 
-  // Simulate call timer
+  // Simulate call timer and manage ringing sound
   useEffect(() => {
-    if (callStatus.includes(':')) {
+    if (callStatus.includes(':')) { // Call is connected
+      if (ringingAudioRef.current) {
+        ringingAudioRef.current.pause();
+      }
       const timer = setInterval(() => {
         setCallStatus(prevStatus => {
           const parts = prevStatus.split(':').map(Number);
@@ -107,8 +117,10 @@ export function AudioCall({ contact, onClose }: AudioCallProps) {
           </Button>
         </div>
       </div>
-      {/* Hidden audio element for remote stream */}
+      {/* Hidden audio element for local audio stream */}
       <audio ref={localAudioRef} autoPlay playsInline className="hidden" />
+      {/* Hidden audio element for ringing sound */}
+      <audio ref={ringingAudioRef} src="https://actions.google.com/sounds/v1/alarms/digital_watch_alarm_long.ogg" loop className="hidden" />
     </div>
   );
 }

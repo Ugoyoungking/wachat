@@ -22,6 +22,7 @@ export function VideoCall({ contact, onClose }: VideoCallProps) {
   const [hasPermissions, setHasPermissions] = useState<boolean | null>(null);
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const ringingAudioRef = useRef<HTMLAudioElement>(null);
 
   useEffect(() => {
     const getMediaPermissions = async () => {
@@ -34,8 +35,14 @@ export function VideoCall({ contact, onClose }: VideoCallProps) {
           localVideoRef.current.srcObject = stream;
         }
 
+        if (ringingAudioRef.current) {
+            ringingAudioRef.current.play().catch(console.error);
+        }
+
         // Simulate call connection
-        setTimeout(() => setCallStatus('00:05'), 2000); 
+        const connectTimer = setTimeout(() => setCallStatus('00:05'), 5000); 
+
+        return () => clearTimeout(connectTimer);
       } catch (error) {
         console.error('Error accessing media devices:', error);
         setHasPermissions(false);
@@ -54,11 +61,17 @@ export function VideoCall({ contact, onClose }: VideoCallProps) {
       if (streamRef.current) {
         streamRef.current.getTracks().forEach(track => track.stop());
       }
+      if (ringingAudioRef.current) {
+        ringingAudioRef.current.pause();
+      }
     };
   }, [toast, onClose]);
 
   useEffect(() => {
-    if (callStatus.includes(':')) {
+    if (callStatus.includes(':')) { // Call is connected
+      if (ringingAudioRef.current) {
+        ringingAudioRef.current.pause();
+      }
       const timer = setInterval(() => {
         setCallStatus(prevStatus => {
           const parts = prevStatus.split(':').map(Number);
@@ -158,6 +171,8 @@ export function VideoCall({ contact, onClose }: VideoCallProps) {
           </Button>
         </div>
       </div>
+      {/* Hidden audio element for ringing sound */}
+      <audio ref={ringingAudioRef} src="https://actions.google.com/sounds/v1/alarms/digital_watch_alarm_long.ogg" loop className="hidden" />
     </div>
   );
 }
