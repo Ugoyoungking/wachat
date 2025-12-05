@@ -203,7 +203,9 @@ export default function RootLayout({
         <meta name="apple-mobile-web-app-title" content="WaChat" />
         <meta name="mobile-web-app-capable" content="yes" />
         <meta name="application-name" content="WaChat" />
+        <link rel="icon" href="/icons/icon-512.png" type="image/png" />
         <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+        <link rel="manifest" href="/manifest.json" />
         <link rel="alternate" hrefLang="en" href="https://wachat-app.vercel.app/" />
         <script
             type="application/ld+json"
