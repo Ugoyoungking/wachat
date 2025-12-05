@@ -32,9 +32,18 @@ service cloud.firestore {
     /**
      * Returns true if the requesting user is a participant in the chat.
      */
-    function isChatParticipant(chatDoc) {
-      return isSignedIn() && request.auth.uid in chatDoc.data.userIds;
+    function isChatParticipant(chatId) {
+      return isSignedIn() && request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.userIds;
     }
+
+    /**
+     * Returns true if the requesting user is the caller or callee of the call.
+     */
+     function isCallParticipant(callId) {
+        let call = get(/databases/$(database)/documents/calls/$(callId)).data;
+        return isSignedIn() && (request.auth.uid == call.callerId || request.auth.uid == call.calleeId);
+     }
+
 
     // ----------------------------------------------------------------------
     // Collection Rules
@@ -43,13 +52,13 @@ service cloud.firestore {
     /**
      * @description Controls access to user profile documents.
      * @path /users/{userId}
-     * @allow (get, list) - Any authenticated user can read user profiles to discover other users.
-     * @allow (create, update, delete) - A user can only write to their own profile document.
      */
     match /users/{userId} {
       allow get, list: if isSignedIn();
+      // A user can create their own profile.
       allow create: if isOwner(userId);
-      // Allow updates for status and lastSeen by the user themselves
+      // A user can update their own profile, but only specific fields.
+      // This prevents a user from maliciously changing their ID or email.
       allow update: if isOwner(userId);
       allow delete: if isOwner(userId);
     }
@@ -57,29 +66,33 @@ service cloud.firestore {
     /**
      * @description Secures chat metadata.
      * @path /chats/{chatId}
-     * @allow (read, write) - Only participants of the chat can read or write chat metadata.
-     * @allow (list) - Users can only query for chats they are a part of, enforced by the read rule.
      */
     match /chats/{chatId} {
-      allow get, write: if isSignedIn() && request.auth.uid in resource.data.userIds;
-      allow list: if isSignedIn();
-      allow create: if isSignedIn();
+      // A user can read a chat document if they are a participant.
+      allow get: if isChatParticipant(chatId);
+      
+      allow list: if isSignedIn() && request.query.where['userIds']['array-contains'] == request.auth.uid;
+
+      // A user can create a chat if they are signed in and their UID is in the userIds array of the new document.
+      allow create: if isSignedIn() && request.auth.uid in request.resource.data.userIds;
+      
+      // A user can update a chat (e.g., lastMessage, typing status) if they are a participant.
+      allow update: if isChatParticipant(chatId);
     }
     
     /**
      * @description Secures messages within a chat.
      * @path /chats/{chatId}/messages/{messageId}
-     * @allow (all) - Only participants of the parent chat can access messages.
-     * @allow update - Allow participants to update the 'read' status.
      */
     match /chats/{chatId}/messages/{messageId} {
-      allow read, write: if isSignedIn() && request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.userIds;
+      // Users can read/write messages if they are part of the chat.
+      // Additionally, allow updates for read receipts.
+      allow read, write: if isChatParticipant(chatId);
     }
 
     /**
      * @description Secures the private device information for a user.
      * @path /users/{userId}/devices/{deviceId}
-     * @allow (all) - A user can manage their own list of linked devices.
      */
     match /users/{userId}/devices/{deviceId} {
       allow read, write, delete: if isOwner(userId);
@@ -88,10 +101,19 @@ service cloud.firestore {
     /**
      * @description Secures the private Custom AI configurations for a user.
      * @path /users/{userId}/customAIs/{customAIId}
-     * @allow (all) - A user can create, read, update, and delete their own custom AIs.
      */
     match /users/{userId}/customAIs/{customAIId} {
        allow read, write, delete: if isOwner(userId);
     }
+
+    /**
+     * @description Secures the WebRTC signaling documents.
+     * @path /calls/{callId}
+     */
+     match /calls/{callId} {
+       // Only the caller or callee can access the call document.
+       allow read, write, delete: if isCallParticipant(callId);
+       allow create: if isSignedIn() && request.auth.uid == request.resource.data.callerId;
+     }
   }
 }

@@ -5,160 +5,171 @@ import { useState, useRef, useEffect } from 'react';
 import { User } from '@/lib/data';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { Button } from './ui/button';
-import { Mic, MicOff, PhoneOff, User as UserIcon, Video, VideoOff } from 'lucide-react';
+import { Mic, MicOff, PhoneOff, User as UserIcon, Video, VideoOff, Phone } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { Alert, AlertDescription, AlertTitle } from './ui/alert';
+import { WebRTCManager } from '@/lib/webrtc';
+import { useFirestore, useUser } from '@/firebase';
 
 interface VideoCallProps {
+  callId: string;
   contact: Partial<User>;
+  isReceiving: boolean;
   onClose: () => void;
-  ringingAudioRef: React.RefObject<HTMLAudioElement>;
 }
 
-export function VideoCall({ contact, onClose, ringingAudioRef }: VideoCallProps) {
+export function VideoCall({ callId, contact, isReceiving, onClose }: VideoCallProps) {
   const { toast } = useToast();
+  const firestore = useFirestore();
+  const { user: currentUser } = useUser();
+
+  const [webRTCManager, setWebRTCManager] = useState<WebRTCManager | null>(null);
+  const [callStatus, setCallStatus] = useState(isReceiving ? 'Incoming call...' : 'Ringing...');
   const [isMuted, setIsMuted] = useState(false);
   const [isCameraOff, setIsCameraOff] = useState(false);
-  const [callStatus, setCallStatus] = useState('Ringing...');
-  const [hasPermissions, setHasPermissions] = useState<boolean | null>(null);
+  
   const localVideoRef = useRef<HTMLVideoElement>(null);
-  const streamRef = useRef<MediaStream | null>(null);
+  const remoteVideoRef = useRef<HTMLVideoElement>(null);
+  const ringingAudioRef = useRef<HTMLAudioElement>(null);
 
   useEffect(() => {
-    const getMediaPermissions = async () => {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
-        streamRef.current = stream;
-        setHasPermissions(true);
-        
-        if (localVideoRef.current) {
-          localVideoRef.current.srcObject = stream;
-        }
+    if (!currentUser || !firestore) return;
 
-        // Simulate call connection
-        const connectTimer = setTimeout(() => setCallStatus('00:05'), 5000); 
-
-        return () => clearTimeout(connectTimer);
-      } catch (error) {
-        console.error('Error accessing media devices:', error);
-        setHasPermissions(false);
-        toast({
-          variant: 'destructive',
-          title: 'Permissions Denied',
-          description: 'Please enable microphone and camera permissions to make calls.',
-        });
-        onClose();
-      }
-    };
-
-    getMediaPermissions();
+    const manager = new WebRTCManager(firestore, currentUser.uid, callId, 'video');
+    setWebRTCManager(manager);
     
-    return () => {
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach(track => track.stop());
-      }
-      if (ringingAudioRef.current) {
-        ringingAudioRef.current.pause();
-        ringingAudioRef.current.currentTime = 0;
+    const onLocalStream = (stream: MediaStream) => {
+        if (localVideoRef.current) {
+            localVideoRef.current.srcObject = stream;
+        }
+    };
+
+    const onRemoteStream = (stream: MediaStream) => {
+        if (remoteVideoRef.current) {
+            remoteVideoRef.current.srcObject = stream;
+        }
+    };
+    
+    const onCallStatusChange = (status: string) => {
+      setCallStatus(status);
+       if (status === 'Connected' || status === 'Closed') {
+          if (ringingAudioRef.current) {
+              ringingAudioRef.current.pause();
+          }
       }
     };
-  }, [toast, onClose, ringingAudioRef]);
+    
+    manager.on('localStream', onLocalStream);
+    manager.on('remoteStream', onRemoteStream);
+    manager.on('callStatus', onCallStatusChange);
+
+    if (isReceiving) {
+      // Callee logic
+      ringingAudioRef.current?.play();
+    } else {
+      // Caller logic
+      manager.startCall();
+      ringingAudioRef.current?.play();
+    }
+
+    return () => {
+      manager.hangUp();
+      manager.off('localStream', onLocalStream);
+      manager.off('remoteStream', onRemoteStream);
+      manager.off('callStatus', onCallStatusChange);
+    };
+  }, [callId, currentUser, firestore, isReceiving]);
 
   useEffect(() => {
-    if (callStatus.includes(':')) { // Call is connected
-      if (ringingAudioRef.current) {
-        ringingAudioRef.current.pause();
-        ringingAudioRef.current.currentTime = 0;
-      }
-      const timer = setInterval(() => {
-        setCallStatus(prevStatus => {
-          const parts = prevStatus.split(':').map(Number);
-          const newTime = parts[0] * 60 + parts[1] + 1;
-          const minutes = String(Math.floor(newTime / 60)).padStart(2, '0');
-          const seconds = String(newTime % 60).padStart(2, '0');
-          return `${minutes}:${seconds}`;
-        });
+    let timer: NodeJS.Timeout;
+    if (callStatus === 'Connected') {
+      let seconds = 0;
+      timer = setInterval(() => {
+        seconds++;
+        const mins = String(Math.floor(seconds / 60)).padStart(2, '0');
+        const secs = String(seconds % 60).padStart(2, '0');
+        setCallStatus(`${mins}:${secs}`);
       }, 1000);
-      return () => clearInterval(timer);
     }
-  }, [callStatus, ringingAudioRef]);
+    return () => clearInterval(timer);
+  }, [callStatus]);
 
-  const toggleMute = () => {
-    if (streamRef.current) {
-      streamRef.current.getAudioTracks().forEach(track => {
-        track.enabled = !track.enabled;
-      });
-      setIsMuted(!isMuted);
-    }
-  };
-
-  const toggleCamera = () => {
-    if (streamRef.current) {
-      streamRef.current.getVideoTracks().forEach(track => {
-        track.enabled = !track.enabled;
-      });
-      setIsCameraOff(!isCameraOff);
+  const handleAcceptCall = () => {
+    webRTCManager?.answerCall();
+    if(ringingAudioRef.current) {
+        ringingAudioRef.current.pause();
     }
   };
 
   const handleHangUp = () => {
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach(track => track.stop());
-    }
+    webRTCManager?.hangUp();
     onClose();
   };
 
+  const toggleMute = () => {
+    webRTCManager?.toggleMute(!isMuted);
+    setIsMuted(!isMuted);
+  };
+
+  const toggleCamera = () => {
+    webRTCManager?.toggleCamera(!isCameraOff);
+    setIsCameraOff(!isCameraOff);
+  };
+  
+  if (!webRTCManager) return null;
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-90 backdrop-blur-sm">
-      <div className="relative flex h-full w-full flex-col items-center justify-center space-y-4 text-white">
-        
-        {/* Remote user video (placeholder) */}
-        <div className="absolute inset-0 flex items-center justify-center">
-            <div className="h-48 w-48 rounded-full bg-white/10 flex items-center justify-center">
-                <Avatar className="h-32 w-32 border-4 border-white/50">
-                  <AvatarImage src={contact.avatar} />
-                  <AvatarFallback>
-                    <UserIcon className="h-16 w-16" />
-                  </AvatarFallback>
-                </Avatar>
+      <audio ref={ringingAudioRef} src="https://actions.google.com/sounds/v1/alarms/digital_watch_alarm_long.ogg" loop className="hidden" />
+
+      {/* Remote user video */}
+      <video ref={remoteVideoRef} autoPlay playsInline className="h-full w-full object-cover" />
+      
+      <div className="absolute inset-0 flex flex-col items-center justify-between p-6 text-white">
+        <div className="self-start w-full flex justify-between items-start">
+            <div className='flex flex-col items-center gap-2'>
+                <h1 className="text-4xl font-bold">{contact.name}</h1>
+                <p className="text-lg text-muted-foreground">{callStatus}</p>
+            </div>
+             {/* Local user video */}
+            <div className="h-40 w-32 rounded-lg overflow-hidden border-2 border-white/30 relative">
+              <video ref={localVideoRef} autoPlay muted playsInline className="h-full w-full object-cover" />
+              {isCameraOff && (
+                <div className="absolute inset-0 flex items-center justify-center bg-black/50">
+                   <VideoOff className="h-8 w-8 text-white" />
+                </div>
+              )}
             </div>
         </div>
 
-        {/* Local user video */}
-        <div className="absolute top-4 right-4 h-40 w-32 rounded-lg overflow-hidden border-2 border-white/30">
-          <video ref={localVideoRef} className="h-full w-full object-cover" autoPlay muted playsInline />
-          {isCameraOff && (
-            <div className="absolute inset-0 flex items-center justify-center bg-black/50">
-               <VideoOff className="h-8 w-8 text-white" />
-            </div>
-          )}
-        </div>
-        
-        <div className='absolute top-1/2 -translate-y-1/2 flex flex-col items-center gap-2'>
-            <h1 className="text-4xl font-bold">{contact.name}</h1>
-            <p className="text-lg text-muted-foreground">{callStatus}</p>
-        </div>
-
-
-        <div className="absolute bottom-12 flex items-center gap-6 rounded-full p-4">
+        <div className="flex items-center gap-6 rounded-full p-4">
           <Button
             variant="ghost"
             size="icon"
             className="h-16 w-16 rounded-full bg-white/20 text-white hover:bg-white/30"
             onClick={toggleMute}
-            disabled={!hasPermissions}
           >
             {isMuted ? <MicOff className="h-7 w-7" /> : <Mic className="h-7 w-7" />}
           </Button>
-           <Button
+          <Button
             variant="ghost"
             size="icon"
             className="h-16 w-16 rounded-full bg-white/20 text-white hover:bg-white/30"
             onClick={toggleCamera}
-            disabled={!hasPermissions}
           >
             {isCameraOff ? <VideoOff className="h-7 w-7" /> : <Video className="h-7 w-7" />}
           </Button>
+          
+          {isReceiving && callStatus === 'Incoming call...' && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-16 w-16 rounded-full bg-green-500 text-white hover:bg-green-600"
+              onClick={handleAcceptCall}
+            >
+              <Phone className="h-7 w-7" />
+            </Button>
+          )}
+
           <Button
             variant="ghost"
             size="icon"

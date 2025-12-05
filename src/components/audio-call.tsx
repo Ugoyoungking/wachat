@@ -5,85 +5,121 @@ import { useState, useRef, useEffect } from 'react';
 import { User } from '@/lib/data';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { Button } from './ui/button';
-import { Mic, MicOff, PhoneOff, User as UserIcon } from 'lucide-react';
+import { Mic, MicOff, PhoneOff, User as UserIcon, Phone } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { WebRTCManager } from '@/lib/webrtc';
+import { useUser, useFirestore } from '@/firebase';
 
 interface AudioCallProps {
+  callId: string;
   contact: Partial<User>;
+  isReceiving: boolean;
   onClose: () => void;
-  ringingAudioRef: React.RefObject<HTMLAudioElement>;
 }
 
-export function AudioCall({ contact, onClose, ringingAudioRef }: AudioCallProps) {
+export function AudioCall({ callId, contact, isReceiving, onClose }: AudioCallProps) {
   const { toast } = useToast();
+  const firestore = useFirestore();
+  const { user: currentUser } = useUser();
+
+  const [webRTCManager, setWebRTCManager] = useState<WebRTCManager | null>(null);
+  const [callStatus, setCallStatus] = useState(isReceiving ? 'Incoming call...' : 'Ringing...');
   const [isMuted, setIsMuted] = useState(false);
-  const [callStatus, setCallStatus] = useState('Ringing...');
-  const [hasMicPermission, setHasMicPermission] = useState<boolean | null>(null);
+  const remoteAudioRef = useRef<HTMLAudioElement>(null);
   const localAudioRef = useRef<HTMLAudioElement>(null);
+  const ringingAudioRef = useRef<HTMLAudioElement>(null);
+
 
   useEffect(() => {
-    const getMicPermission = async () => {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-        setHasMicPermission(true);
-        
-        // In a real app, you'd attach this stream to a WebRTC peer connection
-
-        // Simulate call connection
-        const connectTimer = setTimeout(() => setCallStatus('00:05'), 5000); 
-        
-        return () => clearTimeout(connectTimer);
-      } catch (error) {
-        console.error('Error accessing media devices:', error);
-        setHasMicPermission(false);
-        toast({
-          variant: 'destructive',
-          title: 'Microphone Access Denied',
-          description: 'Please enable microphone permissions in your browser settings to make calls.',
-        });
-        onClose();
-      }
-    };
-
-    getMicPermission();
+    if (!currentUser || !firestore) return;
     
-    return () => {
-      if (ringingAudioRef.current) {
-        ringingAudioRef.current.pause();
-        ringingAudioRef.current.currentTime = 0;
+    const manager = new WebRTCManager(firestore, currentUser.uid, callId, 'audio');
+    setWebRTCManager(manager);
+
+    const onRemoteStream = (stream: MediaStream) => {
+      if (remoteAudioRef.current) {
+        remoteAudioRef.current.srcObject = stream;
+        remoteAudioRef.current.play();
       }
     };
-  }, [toast, onClose, ringingAudioRef]);
-
-  // Simulate call timer and manage ringing sound
-  useEffect(() => {
-    if (callStatus.includes(':')) { // Call is connected
-      if (ringingAudioRef.current) {
-        ringingAudioRef.current.pause();
-        ringingAudioRef.current.currentTime = 0;
-      }
-      const timer = setInterval(() => {
-        setCallStatus(prevStatus => {
-          const parts = prevStatus.split(':').map(Number);
-          const newTime = parts[0] * 60 + parts[1] + 1;
-          const minutes = String(Math.floor(newTime / 60)).padStart(2, '0');
-          const seconds = String(newTime % 60).padStart(2, '0');
-          return `${minutes}:${seconds}`;
-        });
-      }, 1000);
-      return () => clearInterval(timer);
+    
+    const onLocalStream = (stream: MediaStream) => {
+        if(localAudioRef.current) {
+            localAudioRef.current.srcObject = stream;
+        }
     }
-  }, [callStatus, ringingAudioRef]);
+
+    const onCallStatusChange = (status: string) => {
+      setCallStatus(status);
+      if (status === 'Connected' || status === 'Closed') {
+          if (ringingAudioRef.current) {
+              ringingAudioRef.current.pause();
+          }
+      }
+    };
+
+    manager.on('remoteStream', onRemoteStream);
+    manager.on('localStream', onLocalStream);
+    manager.on('callStatus', onCallStatusChange);
+
+    if (isReceiving) {
+      // Callee waits for offer
+    } else {
+      // Caller initiates the call
+      manager.startCall();
+      ringingAudioRef.current?.play();
+    }
+
+    return () => {
+      manager.hangUp();
+      manager.off('remoteStream', onRemoteStream);
+      manager.off('localStream', onLocalStream);
+      manager.off('callStatus', onCallStatusChange);
+    };
+
+  }, [callId, currentUser, firestore, isReceiving]);
+
+   // Simulate call timer
+   useEffect(() => {
+    let timer: NodeJS.Timeout;
+    if (callStatus === 'Connected') {
+      let seconds = 0;
+      timer = setInterval(() => {
+        seconds++;
+        const mins = String(Math.floor(seconds / 60)).padStart(2, '0');
+        const secs = String(seconds % 60).padStart(2, '0');
+        setCallStatus(`${mins}:${secs}`);
+      }, 1000);
+    }
+    return () => clearInterval(timer);
+  }, [callStatus]);
+
+  const handleAcceptCall = () => {
+    webRTCManager?.answerCall();
+    if(ringingAudioRef.current) {
+        ringingAudioRef.current.pause();
+    }
+  };
+
+  const handleHangUp = () => {
+    webRTCManager?.hangUp();
+    onClose();
+  };
 
   const toggleMute = () => {
-    // In a real implementation, you'd control the audio track's `enabled` property
+    webRTCManager?.toggleMute(!isMuted);
     setIsMuted(!isMuted);
   };
+  
+  if (!webRTCManager) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-90">
+      <audio ref={ringingAudioRef} src="https://actions.google.com/sounds/v1/alarms/digital_watch_alarm_long.ogg" loop className="hidden" />
+      <audio ref={remoteAudioRef} autoPlay className="hidden" />
+      <audio ref={localAudioRef} autoPlay muted className="hidden" />
+
       <div className="relative flex h-full w-full flex-col items-center justify-center space-y-6 text-white">
-        
         <p className="text-lg text-muted-foreground">{callStatus}</p>
 
         <Avatar className="h-32 w-32 border-4 border-white">
@@ -101,22 +137,31 @@ export function AudioCall({ contact, onClose, ringingAudioRef }: AudioCallProps)
             size="icon"
             className="h-16 w-16 rounded-full bg-white/20 text-white hover:bg-white/30"
             onClick={toggleMute}
-            disabled={hasMicPermission === false}
           >
             {isMuted ? <MicOff className="h-7 w-7" /> : <Mic className="h-7 w-7" />}
           </Button>
+          
+          {isReceiving && callStatus === 'Incoming call...' && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-16 w-16 rounded-full bg-green-500 text-white hover:bg-green-600"
+              onClick={handleAcceptCall}
+            >
+              <Phone className="h-7 w-7" />
+            </Button>
+          )}
+
           <Button
             variant="ghost"
             size="icon"
             className="h-16 w-16 rounded-full bg-destructive text-destructive-foreground hover:bg-destructive/80"
-            onClick={onClose}
+            onClick={handleHangUp}
           >
             <PhoneOff className="h-7 w-7" />
           </Button>
         </div>
       </div>
-      {/* Hidden audio element for local audio stream */}
-      <audio ref={localAudioRef} autoPlay playsInline className="hidden" />
     </div>
   );
 }

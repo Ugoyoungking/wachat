@@ -264,17 +264,18 @@ function MessageBubble({
 function ChatArea({ 
   selectedChatId, 
   currentUser,
-  onBack
+  onBack,
+  startAudioCall,
+  startVideoCall,
 }: { 
   selectedChatId: string | null; 
   currentUser: UserType | null;
   onBack: () => void;
+  startAudioCall: (user: UserType) => void;
+  startVideoCall: (user: UserType) => void;
 }) {
   const firestore = useFirestore();
-  const [isAudioCalling, setIsAudioCalling] = useState(false);
-  const [isVideoCalling, setIsVideoCalling] = useState(false);
   const isMobile = useIsMobile();
-  const ringingAudioRef = useRef<HTMLAudioElement>(null);
 
   const chatDocRef = useMemoFirebase(() => selectedChatId && firestore ? doc(firestore, 'chats', selectedChatId) : null, [selectedChatId, firestore]);
   const { data: selectedChat } = useDoc<Chat>(chatDocRef);
@@ -400,19 +401,6 @@ function ChatArea({
     return user?.name?.charAt(0).toUpperCase() || 'U';
   }, [selectedChat]);
 
-  const startAudioCall = () => {
-    if (ringingAudioRef.current) {
-      ringingAudioRef.current.play().catch(console.error);
-    }
-    setIsAudioCalling(true);
-  }
-
-  const startVideoCall = () => {
-    if (ringingAudioRef.current) {
-      ringingAudioRef.current.play().catch(console.error);
-    }
-    setIsVideoCalling(true);
-  }
 
   if (!selectedChatId) {
     return (
@@ -460,10 +448,10 @@ function ChatArea({
           <p className="font-medium">{otherUser.name}</p>
           <p className='text-sm text-muted-foreground'>{getStatus()}</p>
         </div>
-        <Button variant="ghost" size="icon" onClick={startVideoCall}>
+        <Button variant="ghost" size="icon" onClick={() => startVideoCall(otherUser)}>
           <Video className="h-5 w-5" />
         </Button>
-         <Button variant="ghost" size="icon" onClick={startAudioCall}>
+         <Button variant="ghost" size="icon" onClick={() => startAudioCall(otherUser)}>
           <Phone className="h-5 w-5" />
         </Button>
         <Button variant="ghost" size="icon">
@@ -502,21 +490,6 @@ function ChatArea({
           <Send className="h-5 w-5" />
         </Button>
       </footer>
-      {isAudioCalling && otherUser && (
-        <AudioCall
-          contact={otherUser} 
-          onClose={() => setIsAudioCalling(false)} 
-          ringingAudioRef={ringingAudioRef}
-        />
-      )}
-      {isVideoCalling && otherUser && (
-        <VideoCall
-          contact={otherUser} 
-          onClose={() => setIsVideoCalling(false)} 
-          ringingAudioRef={ringingAudioRef}
-        />
-      )}
-      <audio ref={ringingAudioRef} src="https://actions.google.com/sounds/v1/alarms/digital_watch_alarm_long.ogg" loop className="hidden" />
     </div>
   )
 }
@@ -697,12 +670,14 @@ function ChatListPanel({ onSelectChat, selectedChatId }: { onSelectChat: (chatId
   const firestore = useFirestore();
   const router = useRouter();
 
-  const chatsQuery = useMemoFirebase(() => currentUser
-    ? query(
-        collection(firestore, 'chats'), 
-        where('userIds', 'array-contains', currentUser.uid)
-      )
-    : null, [currentUser, firestore]);
+  const chatsQuery = useMemoFirebase(() => {
+    if (!currentUser || !firestore) return null;
+    return query(
+      collection(firestore, 'chats'), 
+      where('userIds', 'array-contains', currentUser.uid)
+    );
+  }, [currentUser, firestore]);
+
   const { data: chats, isLoading: isLoadingChats } = useCollection<Chat>(chatsQuery);
   
   const searchParams = useSearchParams();
@@ -741,7 +716,6 @@ function ChatListPanel({ onSelectChat, selectedChatId }: { onSelectChat: (chatId
     
     return () => {
       window.removeEventListener('visibilitychange', handleVisibilityChange);
-      // Don't set to offline here, as it causes issues on navigation
     };
   }, [currentUser, firestore]);
 
@@ -752,6 +726,18 @@ function ChatListPanel({ onSelectChat, selectedChatId }: { onSelectChat: (chatId
   }
 
   const isLoading = isLoadingUser || isLoadingChats;
+  
+  const sortedChats = useMemo(() => {
+    if (!chats) return [];
+    return [...chats].sort((a, b) => {
+        const aTimestamp = a.lastMessage?.timestamp;
+        const bTimestamp = b.lastMessage?.timestamp;
+        if (aTimestamp && bTimestamp) {
+            return bTimestamp.toMillis() - aTimestamp.toMillis();
+        }
+        return 0; // Or handle cases where timestamp is null
+    });
+  }, [chats]);
 
   return (
     <div className="flex flex-col h-full w-full md:w-[380px] bg-sidebar-panel-background border-r border-sidebar-border">
@@ -783,7 +769,7 @@ function ChatListPanel({ onSelectChat, selectedChatId }: { onSelectChat: (chatId
       <ScrollArea className="flex-1">
         <div className="space-y-1 p-2">
            {isLoading && <p className='p-2 text-sm text-muted-foreground'>Loading chats...</p>}
-           {!isLoading && chats?.map((chat) => {
+           {!isLoading && sortedChats?.map((chat) => {
              const otherUser = chat.users.find(u => u.id !== currentUser?.uid);
              const unreadCount = currentUser ? chat.unreadCount?.[currentUser.uid] || 0 : 0;
              return (
@@ -827,12 +813,81 @@ function ChatClientContent() {
   const isMobile = useIsMobile();
   const router = useRouter();
 
+  const [activeCall, setActiveCall] = useState<{ callId: string, contact: UserType, type: 'audio' | 'video', isReceiving: boolean } | null>(null);
+
+  const firestore = useFirestore();
+
+  // Listen for incoming calls
+  useEffect(() => {
+    if (!user || !firestore) return;
+
+    const callsRef = collection(firestore, 'calls');
+    const q = query(callsRef, where('calleeId', '==', user.uid), where('status', '==', 'ringing'));
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      if (!snapshot.empty) {
+        const callDoc = snapshot.docs[0];
+        const callData = callDoc.data();
+        
+        // Ensure we're not already in a call
+        if (activeCall) return;
+
+        const callerId = callData.callerId;
+        getDoc(doc(firestore, 'users', callerId)).then(userDoc => {
+          if (userDoc.exists()) {
+            const contact = { id: userDoc.id, ...userDoc.data() } as UserType;
+            setActiveCall({
+              callId: callDoc.id,
+              contact,
+              type: callData.type,
+              isReceiving: true,
+            });
+          }
+        });
+      }
+    });
+
+    return () => unsubscribe();
+  }, [user, firestore, activeCall]);
+
+  const startAudioCall = async (contact: UserType) => {
+    if (!user || !firestore) return;
+
+    // Create call document in Firestore
+    const callDocRef = await addDoc(collection(firestore, 'calls'), {
+      callerId: user.uid,
+      calleeId: contact.id,
+      status: 'ringing',
+      type: 'audio',
+    });
+
+    setActiveCall({ callId: callDocRef.id, contact, type: 'audio', isReceiving: false });
+  };
+
+  const startVideoCall = async (contact: UserType) => {
+    if (!user || !firestore) return;
+
+    // Create call document in Firestore
+    const callDocRef = await addDoc(collection(firestore, 'calls'), {
+      callerId: user.uid,
+      calleeId: contact.id,
+      status: 'ringing',
+      type: 'video',
+    });
+
+    setActiveCall({ callId: callDocRef.id, contact, type: 'video', isReceiving: false });
+  };
+
+  const closeCall = () => {
+    setActiveCall(null);
+  };
+
+
   useEffect(() => {
     const urlChatId = searchParams.get('chatId');
     if (urlChatId) {
       setSelectedChatId(urlChatId);
     } else {
-      // On mobile, if no chat is selected via URL, ensure we are in the list view.
       if (isMobile) {
         setSelectedChatId(null);
       }
@@ -841,13 +896,10 @@ function ChatClientContent() {
 
   const handleSelectChat = (chatId: string) => {
     setSelectedChatId(chatId);
-    // No need to push router here for mobile, the parent component handles the view change.
-    // However, we still want to update the URL for deep linking and refresh persistence.
     router.push(`/chat?chatId=${chatId}`, { scroll: false });
   };
   
   const handleBack = () => {
-    // Just navigate to the base chat URL. The useEffect will handle the state change.
     router.push('/chat', { scroll: false });
   };
 
@@ -855,9 +907,19 @@ function ChatClientContent() {
     return <div className="flex h-screen w-full items-center justify-center"><Loader2 className="h-8 w-8 animate-spin" /></div>
   }
   
+  const CallComponent = activeCall?.type === 'audio' ? AudioCall : VideoCall;
+  
   if (isMobile) {
     return (
       <div className="w-full h-screen overflow-hidden">
+        {activeCall && (
+            <CallComponent 
+                callId={activeCall.callId}
+                contact={activeCall.contact}
+                isReceiving={activeCall.isReceiving}
+                onClose={closeCall}
+            />
+        )}
         <div className={cn(
           "w-full h-full transition-transform duration-300 ease-in-out",
           selectedChatId ? "-translate-x-full" : "translate-x-0"
@@ -873,6 +935,8 @@ function ChatClientContent() {
               selectedChatId={selectedChatId} 
               currentUser={user} 
               onBack={handleBack}
+              startAudioCall={startAudioCall}
+              startVideoCall={startVideoCall}
             />
           )}
         </div>
@@ -882,12 +946,22 @@ function ChatClientContent() {
 
   return (
     <>
+      {activeCall && (
+            <CallComponent 
+                callId={activeCall.callId}
+                contact={activeCall.contact}
+                isReceiving={activeCall.isReceiving}
+                onClose={closeCall}
+            />
+      )}
       <ChatListPanel onSelectChat={handleSelectChat} selectedChatId={selectedChatId} />
       <div className="flex-1">
         <ChatArea 
           selectedChatId={selectedChatId} 
           currentUser={user} 
           onBack={handleBack}
+          startAudioCall={startAudioCall}
+          startVideoCall={startVideoCall}
         />
       </div>
     </>

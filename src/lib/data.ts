@@ -30,3 +30,13 @@ export type Chat = {
   };
   unreadCount?: { [key: string]: number };
 };
+
+export type Call = {
+    id: string;
+    callerId: string;
+    calleeId: string;
+    offer?: RTCSessionDescriptionInit;
+    answer?: RTCSessionDescriptionInit;
+    status: 'ringing' | 'answered' | 'declined' | 'ended';
+    type: 'audio' | 'video';
+};
