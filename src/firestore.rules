@@ -64,8 +64,8 @@ service cloud.firestore {
       // A user can read a chat document if they are a participant.
       allow get: if isChatParticipant(chatId);
       
-      // A user can list chats ONLY if they are querying for their own chats.
-      // This rule enforces that the 'userIds' field must be used in a where clause.
+      // A user can list chats ONLY if they are querying for their own chats,
+      // optionally ordering by the last message timestamp.
       allow list: if isSignedIn() && request.query.where.userIds == request.auth.uid;
 
       // A user can create a chat if they are signed in and their UID is in the userIds array of the new document.
@@ -80,12 +80,7 @@ service cloud.firestore {
      * @path /chats/{chatId}/messages/{messageId}
      */
     match /chats/{chatId}/messages/{messageId} {
-      allow read, write, delete: if isChatParticipant(chatId);
-      
-      // Allow participants to update the 'read' status or reactions on a message.
-      // This is more specific than a general 'write' and is good practice.
-      allow update: if isChatParticipant(chatId) &&
-                       (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read', 'reactions']));
+      allow read, write: if isChatParticipant(chatId);
     }
 
     /**

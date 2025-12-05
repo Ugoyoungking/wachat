@@ -2,7 +2,7 @@
 'use client';
 
 import { useState, useEffect, FormEvent, Suspense, useRef, useCallback } from 'react';
-import { collection, addDoc, serverTimestamp, query, orderBy, where, getDocs, limit, doc, getDoc, updateDoc, writeBatch, deleteDoc } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp, query, orderBy, where, getDocs, limit, doc, getDoc, updateDoc, writeBatch, deleteDoc, increment } from 'firebase/firestore';
 import { useFirestore, useUser, useMemoFirebase, errorEmitter, FirestorePermissionError, useCollection, useDoc } from '@/firebase';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
@@ -293,25 +293,32 @@ function ChatArea({
   
   
    useEffect(() => {
-    if (!messages || !currentUser || !firestore || !selectedChatId) return;
+    if (!messages || !currentUser || !firestore || !selectedChatId || !chatDocRef) return;
   
     const unreadMessages = messages.filter(m => m.senderId !== currentUser.uid && !m.read);
   
     if (unreadMessages.length > 0) {
       const batch = writeBatch(firestore);
+      // Mark messages as read
       unreadMessages.forEach(message => {
         const msgRef = doc(firestore, 'chats', selectedChatId, 'messages', message.id);
         batch.update(msgRef, { read: true });
       });
+
+      // Reset user's unread count for this chat
+      const chatUpdateData: { [key: string]: any } = {};
+      chatUpdateData[`unreadCount.${currentUser.uid}`] = 0;
+      batch.update(chatDocRef, chatUpdateData);
+
       batch.commit().catch(err => {
          errorEmitter.emit('permission-error', new FirestorePermissionError({
-            path: `chats/${selectedChatId}/messages`,
+            path: `chats/${selectedChatId}`,
             operation: 'update',
-            requestResourceData: { read: true }
+            requestResourceData: { read: true, unreadCount: 0 }
          }));
       });
     }
-  }, [messages, currentUser, firestore, selectedChatId]);
+  }, [messages, currentUser, firestore, selectedChatId, chatDocRef]);
 
 
   useEffect(() => {
@@ -325,26 +332,49 @@ function ChatArea({
 
   const handleSendMessage = async (e: FormEvent) => {
     e.preventDefault();
-    if (message.trim() === '' || !selectedChatId || !currentUser || !firestore) return;
+    if (message.trim() === '' || !selectedChatId || !currentUser || !firestore || !otherUserId || !chatDocRef) return;
+
+    const currentMessage = message.trim();
+    setMessage(''); // Clear input immediately
 
     const messagesCol = collection(firestore, 'chats', selectedChatId, 'messages');
     
     const messageData = {
       senderId: currentUser.uid,
-      text: message.trim(),
+      text: currentMessage,
       timestamp: serverTimestamp(),
       read: false,
     };
     
-    addDoc(messagesCol, messageData).catch(err => {
-      errorEmitter.emit('permission-error', new FirestorePermissionError({
-        path: messagesCol.path,
-        operation: 'create',
-        requestResourceData: messageData
-      }));
-    });
-    
-    setMessage('');
+    const newMessageRef = doc(messagesCol); // Create a new doc ref to get ID
+
+    try {
+        const batch = writeBatch(firestore);
+
+        // 1. Add the new message
+        batch.set(newMessageRef, messageData);
+
+        // 2. Update the parent chat document
+        const chatUpdateData: { [key: string]: any } = {
+            lastMessage: {
+                text: currentMessage,
+                timestamp: serverTimestamp(),
+            },
+        };
+        // Increment unread count for the other user
+        chatUpdateData[`unreadCount.${otherUserId}`] = increment(1);
+        
+        batch.update(chatDocRef, chatUpdateData);
+
+        await batch.commit();
+
+    } catch (err) {
+       errorEmitter.emit('permission-error', new FirestorePermissionError({
+            path: `chats/${selectedChatId}`,
+            operation: 'write',
+            requestResourceData: { message: messageData, chatUpdate: '...' }
+        }));
+    }
   };
   
   const handleTyping = (text: string) => {
@@ -567,7 +597,8 @@ function NewChatDialog({ onChatCreated }: { onChatCreated: (chatId: string) => v
                 userIds: sortedUserIds,
                 users: usersData,
                 timestamp: serverTimestamp(),
-                lastMessage: { text: null, timestamp: serverTimestamp() }
+                lastMessage: { text: null, timestamp: serverTimestamp() },
+                unreadCount: { [currentUser.uid]: 0, [foundUser.id]: 0 }
             };
 
             addDoc(chatsCol, newChatData)
@@ -668,7 +699,11 @@ function ChatListPanel({ onSelectChat, selectedChatId }: { onSelectChat: (chatId
   const router = useRouter();
 
   const chatsQuery = useMemoFirebase(() => currentUser
-    ? query(collection(firestore, 'chats'), where('userIds', 'array-contains', currentUser.uid))
+    ? query(
+        collection(firestore, 'chats'), 
+        where('userIds', 'array-contains', currentUser.uid),
+        orderBy('lastMessage.timestamp', 'desc')
+      )
     : null, [currentUser, firestore]);
   const { data: chats, isLoading: isLoadingChats } = useCollection<Chat>(chatsQuery);
   
@@ -722,6 +757,11 @@ function ChatListPanel({ onSelectChat, selectedChatId }: { onSelectChat: (chatId
   }
 
   const isLoading = isLoadingUser || isLoadingChats;
+  
+  const formatTimestamp = (timestamp: any) => {
+    if (!timestamp) return '';
+    return formatDistanceToNowStrict(timestamp.toDate(), { addSuffix: true });
+  }
 
   return (
     <div className="flex flex-col h-full w-full md:w-[380px] bg-sidebar-panel-background border-r border-sidebar-border">
@@ -755,6 +795,7 @@ function ChatListPanel({ onSelectChat, selectedChatId }: { onSelectChat: (chatId
            {isLoading && <p className='p-2 text-sm text-muted-foreground'>Loading chats...</p>}
            {!isLoading && chats?.map((chat) => {
              const otherUser = chat.users.find(u => u.id !== currentUser?.uid);
+             const unreadCount = currentUser ? chat.unreadCount?.[currentUser.uid] : 0;
              return (
                <button
                   key={chat.id}
@@ -771,11 +812,14 @@ function ChatListPanel({ onSelectChat, selectedChatId }: { onSelectChat: (chatId
                   <div className="flex-1 truncate">
                     <p className="font-medium">{otherUser?.name}</p>
                     <p className="text-sm text-muted-foreground truncate">
-                      No messages yet
+                      {chat.lastMessage?.text || 'No messages yet'}
                     </p>
                   </div>
-                  <div className='text-xs text-muted-foreground self-start mt-1'>
-                    
+                  <div className='flex flex-col items-end gap-1 text-xs text-muted-foreground self-start mt-1'>
+                    <span>{formatTimestamp(chat.lastMessage?.timestamp)}</span>
+                    {unreadCount && unreadCount > 0 ? (
+                       <Badge className='h-5 w-5 flex items-center justify-center p-0 bg-accent text-accent-foreground'>{unreadCount}</Badge>
+                    ) : <div className="h-5 w-5" />}
                   </div>
                </button>
              )
