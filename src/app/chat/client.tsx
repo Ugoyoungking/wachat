@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, FormEvent, Suspense, useRef, useCallback } from 'react';
@@ -17,6 +16,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import Image from 'next/image';
 import { AudioCall } from '@/components/audio-call';
+import { VideoCall } from '@/components/video-call';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -212,7 +212,8 @@ function ChatArea({
   onBack: () => void;
 }) {
   const firestore = useFirestore();
-  const [isCalling, setIsCalling] = useState(false);
+  const [isAudioCalling, setIsAudioCalling] = useState(false);
+  const [isVideoCalling, setIsVideoCalling] = useState(false);
   const isMobile = useIsMobile();
 
   const chatDocRef = useMemoFirebase(() => selectedChatId && firestore ? doc(firestore, 'chats', selectedChatId) : null, [selectedChatId, firestore]);
@@ -230,9 +231,8 @@ function ChatArea({
   const [message, setMessage] = useState('');
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   
-  const isOtherUserTyping = false; // Placeholder
+  const isOtherUserTyping = false; // Placeholder for typing indicator
   
-  // Update read status for incoming messages
   useEffect(() => {
     if (!messages || !currentUser || !firestore || !selectedChatId) return;
   
@@ -277,7 +277,7 @@ function ChatArea({
       read: false,
     };
     
-    addDoc(messagesCol, messageData).catch(err => {
+    await addDoc(messagesCol, messageData).catch(err => {
       errorEmitter.emit('permission-error', new FirestorePermissionError({
         path: messagesCol.path,
         operation: 'create',
@@ -359,10 +359,10 @@ function ChatArea({
           <p className="font-medium">{otherUser.name}</p>
           <p className='text-sm text-muted-foreground'>{getStatus()}</p>
         </div>
-        <Button variant="ghost" size="icon">
+        <Button variant="ghost" size="icon" onClick={() => setIsVideoCalling(true)}>
           <Video className="h-5 w-5" />
         </Button>
-         <Button variant="ghost" size="icon" onClick={() => setIsCalling(true)}>
+         <Button variant="ghost" size="icon" onClick={() => setIsAudioCalling(true)}>
           <Phone className="h-5 w-5" />
         </Button>
         <Button variant="ghost" size="icon">
@@ -414,10 +414,16 @@ function ChatArea({
           <Send className="h-5 w-5" />
         </Button>
       </footer>
-      {isCalling && otherUser && (
+      {isAudioCalling && otherUser && (
         <AudioCall
           contact={otherUser} 
-          onClose={() => setIsCalling(false)} 
+          onClose={() => setIsAudioCalling(false)} 
+        />
+      )}
+      {isVideoCalling && otherUser && (
+        <VideoCall
+          contact={otherUser} 
+          onClose={() => setIsVideoCalling(false)} 
         />
       )}
     </div>
@@ -499,7 +505,7 @@ function NewChatDialog({ onChatCreated }: { onChatCreated: (chatId: string) => v
                 userIds: sortedUserIds,
                 users: usersData,
                 timestamp: serverTimestamp(),
-                lastMessage: { text: null, timestamp: null }
+                lastMessage: { text: null, timestamp: serverTimestamp() }
             };
 
             addDoc(chatsCol, newChatData)
@@ -600,7 +606,7 @@ function ChatListPanel({ onSelectChat, selectedChatId }: { onSelectChat: (chatId
   const router = useRouter();
 
   const chatsQuery = useMemoFirebase(() => currentUser
-    ? query(collection(firestore, 'chats'), where('userIds', 'array-contains', currentUser.uid), orderBy('lastMessage.timestamp', 'desc'))
+    ? query(collection(firestore, 'chats'), where('userIds', 'array-contains', currentUser.uid))
     : null, [currentUser, firestore]);
   const { data: chats, isLoading: isLoadingChats } = useCollection<Chat>(chatsQuery);
   
@@ -618,25 +624,27 @@ function ChatListPanel({ onSelectChat, selectedChatId }: { onSelectChat: (chatId
     if (!currentUser || !firestore) return;
 
     const userRef = doc(firestore, 'users', currentUser.uid);
-
-    // Set user to online
     const onlineData = { status: 'online', lastSeen: serverTimestamp() };
     updateDoc(userRef, onlineData).catch(err => {
+      // This might fail if the user is offline, which is fine.
       // Non-critical, so we can just log this locally without breaking UX
       console.error("Failed to set user online:", err);
     });
 
-    // Set user to offline on disconnect
-    const handleBeforeUnload = () => {
-      const offlineData = { status: 'offline', lastSeen: serverTimestamp() };
-      // Use synchronous navigator.sendBeacon or a cloud function for reliability
-      updateDoc(userRef, offlineData);
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        const offlineData = { status: 'offline', lastSeen: serverTimestamp() };
+        updateDoc(userRef, offlineData);
+      } else {
+         const onlineData = { status: 'online', lastSeen: serverTimestamp() };
+         updateDoc(userRef, onlineData);
+      }
     };
     
-    window.addEventListener('beforeunload', handleBeforeUnload);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
 
     return () => {
-      window.removeEventListener('beforeunload', handleBeforeUnload);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
       const offlineData = { status: 'offline', lastSeen: serverTimestamp() };
       updateDoc(userRef, offlineData).catch(err => {
          // Don't emit here as it might happen during page unload.
@@ -699,9 +707,12 @@ function ChatListPanel({ onSelectChat, selectedChatId }: { onSelectChat: (chatId
                   </Avatar>
                   <div className="flex-1 truncate">
                     <p className="font-medium">{otherUser?.name}</p>
-                    <p className="text-sm text-muted-foreground">No messages yet</p>
+                    <p className="text-sm text-muted-foreground truncate">
+                      {chat.lastMessage?.text || 'No messages yet'}
+                    </p>
                   </div>
-                  <div className='text-xs text-muted-foreground'>
+                  <div className='text-xs text-muted-foreground self-start mt-1'>
+                    {chat.lastMessage?.timestamp && formatDistanceToNowStrict(chat.lastMessage.timestamp.toDate(), { addSuffix: true })}
                   </div>
                </button>
              )
