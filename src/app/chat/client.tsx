@@ -1,8 +1,8 @@
 
 'use client';
 
-import { useState, useEffect, FormEvent, Suspense, useRef, useCallback } from 'react';
-import { collection, addDoc, serverTimestamp, query, orderBy, where, getDocs, limit, doc, getDoc, updateDoc, writeBatch, deleteDoc } from 'firebase/firestore';
+import { useState, useEffect, FormEvent, Suspense, useRef, useCallback, useMemo } from 'react';
+import { collection, addDoc, serverTimestamp, query, orderBy, where, getDocs, limit, doc, getDoc, updateDoc, writeBatch, deleteDoc, onSnapshot } from 'firebase/firestore';
 import { useFirestore, useUser, useMemoFirebase, errorEmitter, FirestorePermissionError, useCollection, useDoc } from '@/firebase';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
@@ -674,7 +674,8 @@ function ChatListPanel({ onSelectChat, selectedChatId }: { onSelectChat: (chatId
     if (!currentUser || !firestore) return null;
     return query(
       collection(firestore, 'chats'), 
-      where('userIds', 'array-contains', currentUser.uid)
+      where('userIds', 'array-contains', currentUser.uid),
+      orderBy('lastMessage.timestamp', 'desc')
     );
   }, [currentUser, firestore]);
 
@@ -735,7 +736,9 @@ function ChatListPanel({ onSelectChat, selectedChatId }: { onSelectChat: (chatId
         if (aTimestamp && bTimestamp) {
             return bTimestamp.toMillis() - aTimestamp.toMillis();
         }
-        return 0; // Or handle cases where timestamp is null
+        if (aTimestamp) return -1;
+        if (bTimestamp) return 1;
+        return 0;
     });
   }, [chats]);
 
@@ -814,6 +817,7 @@ function ChatClientContent() {
   const router = useRouter();
 
   const [activeCall, setActiveCall] = useState<{ callId: string, contact: UserType, type: 'audio' | 'video', isReceiving: boolean } | null>(null);
+  const ringingAudioRef = useRef<HTMLAudioElement>(null);
 
   const firestore = useFirestore();
 
@@ -842,6 +846,7 @@ function ChatClientContent() {
               type: callData.type,
               isReceiving: true,
             });
+            ringingAudioRef.current?.play().catch(e => console.log("Ringing sound was blocked by browser."));
           }
         });
       }
@@ -862,6 +867,7 @@ function ChatClientContent() {
     });
 
     setActiveCall({ callId: callDocRef.id, contact, type: 'audio', isReceiving: false });
+    ringingAudioRef.current?.play().catch(e => console.log("Ringing sound was blocked by browser."));
   };
 
   const startVideoCall = async (contact: UserType) => {
@@ -876,9 +882,11 @@ function ChatClientContent() {
     });
 
     setActiveCall({ callId: callDocRef.id, contact, type: 'video', isReceiving: false });
+    ringingAudioRef.current?.play().catch(e => console.log("Ringing sound was blocked by browser."));
   };
 
   const closeCall = () => {
+    ringingAudioRef.current?.pause();
     setActiveCall(null);
   };
 
@@ -918,6 +926,7 @@ function ChatClientContent() {
                 contact={activeCall.contact}
                 isReceiving={activeCall.isReceiving}
                 onClose={closeCall}
+                ringingAudioRef={ringingAudioRef}
             />
         )}
         <div className={cn(
@@ -952,6 +961,7 @@ function ChatClientContent() {
                 contact={activeCall.contact}
                 isReceiving={activeCall.isReceiving}
                 onClose={closeCall}
+                ringingAudioRef={ringingAudioRef}
             />
       )}
       <ChatListPanel onSelectChat={handleSelectChat} selectedChatId={selectedChatId} />

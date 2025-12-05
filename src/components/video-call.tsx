@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, RefObject } from 'react';
 import { User } from '@/lib/data';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { Button } from './ui/button';
@@ -15,9 +15,10 @@ interface VideoCallProps {
   contact: Partial<User>;
   isReceiving: boolean;
   onClose: () => void;
+  ringingAudioRef: RefObject<HTMLAudioElement>;
 }
 
-export function VideoCall({ callId, contact, isReceiving, onClose }: VideoCallProps) {
+export function VideoCall({ callId, contact, isReceiving, onClose, ringingAudioRef }: VideoCallProps) {
   const { toast } = useToast();
   const firestore = useFirestore();
   const { user: currentUser } = useUser();
@@ -29,7 +30,6 @@ export function VideoCall({ callId, contact, isReceiving, onClose }: VideoCallPr
   
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
-  const ringingAudioRef = useRef<HTMLAudioElement>(null);
 
   useEffect(() => {
     if (!currentUser || !firestore) return;
@@ -64,11 +64,9 @@ export function VideoCall({ callId, contact, isReceiving, onClose }: VideoCallPr
 
     if (isReceiving) {
       // Callee logic
-      ringingAudioRef.current?.play();
     } else {
       // Caller logic
       manager.startCall();
-      ringingAudioRef.current?.play();
     }
 
     return () => {
@@ -77,7 +75,7 @@ export function VideoCall({ callId, contact, isReceiving, onClose }: VideoCallPr
       manager.off('remoteStream', onRemoteStream);
       manager.off('callStatus', onCallStatusChange);
     };
-  }, [callId, currentUser, firestore, isReceiving]);
+  }, [callId, currentUser, firestore, isReceiving, ringingAudioRef]);
 
   useEffect(() => {
     let timer: NodeJS.Timeout;
@@ -119,8 +117,6 @@ export function VideoCall({ callId, contact, isReceiving, onClose }: VideoCallPr
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-90 backdrop-blur-sm">
-      <audio ref={ringingAudioRef} src="https://actions.google.com/sounds/v1/alarms/digital_watch_alarm_long.ogg" loop className="hidden" />
-
       {/* Remote user video */}
       <video ref={remoteVideoRef} autoPlay playsInline className="h-full w-full object-cover" />
       
@@ -183,3 +179,5 @@ export function VideoCall({ callId, contact, isReceiving, onClose }: VideoCallPr
     </div>
   );
 }
+
+    

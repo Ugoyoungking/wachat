@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, RefObject } from 'react';
 import { User } from '@/lib/data';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { Button } from './ui/button';
@@ -15,9 +15,10 @@ interface AudioCallProps {
   contact: Partial<User>;
   isReceiving: boolean;
   onClose: () => void;
+  ringingAudioRef: RefObject<HTMLAudioElement>;
 }
 
-export function AudioCall({ callId, contact, isReceiving, onClose }: AudioCallProps) {
+export function AudioCall({ callId, contact, isReceiving, onClose, ringingAudioRef }: AudioCallProps) {
   const { toast } = useToast();
   const firestore = useFirestore();
   const { user: currentUser } = useUser();
@@ -27,8 +28,6 @@ export function AudioCall({ callId, contact, isReceiving, onClose }: AudioCallPr
   const [isMuted, setIsMuted] = useState(false);
   const remoteAudioRef = useRef<HTMLAudioElement>(null);
   const localAudioRef = useRef<HTMLAudioElement>(null);
-  const ringingAudioRef = useRef<HTMLAudioElement>(null);
-
 
   useEffect(() => {
     if (!currentUser || !firestore) return;
@@ -67,7 +66,6 @@ export function AudioCall({ callId, contact, isReceiving, onClose }: AudioCallPr
     } else {
       // Caller initiates the call
       manager.startCall();
-      ringingAudioRef.current?.play();
     }
 
     return () => {
@@ -77,7 +75,7 @@ export function AudioCall({ callId, contact, isReceiving, onClose }: AudioCallPr
       manager.off('callStatus', onCallStatusChange);
     };
 
-  }, [callId, currentUser, firestore, isReceiving]);
+  }, [callId, currentUser, firestore, isReceiving, ringingAudioRef]);
 
    // Simulate call timer
    useEffect(() => {
@@ -115,7 +113,6 @@ export function AudioCall({ callId, contact, isReceiving, onClose }: AudioCallPr
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-90">
-      <audio ref={ringingAudioRef} src="https://actions.google.com/sounds/v1/alarms/digital_watch_alarm_long.ogg" loop className="hidden" />
       <audio ref={remoteAudioRef} autoPlay className="hidden" />
       <audio ref={localAudioRef} autoPlay muted className="hidden" />
 
@@ -165,3 +162,5 @@ export function AudioCall({ callId, contact, isReceiving, onClose }: AudioCallPr
     </div>
   );
 }
+
+    
