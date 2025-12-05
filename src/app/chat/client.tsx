@@ -293,7 +293,7 @@ function ChatArea({
   
   
    useEffect(() => {
-    if (!messages || !currentUser || !firestore || !selectedChatId) return;
+    if (!messages || !currentUser || !firestore || !selectedChatId || !selectedChat) return;
   
     const unreadMessages = messages.filter(m => m.senderId !== currentUser.uid && !m.read);
   
@@ -304,6 +304,13 @@ function ChatArea({
         batch.update(msgRef, { read: true });
       });
 
+      // Also reset unread count
+      if (selectedChat?.unreadCount && selectedChat.unreadCount[currentUser.uid] > 0) {
+        const chatRef = doc(firestore, 'chats', selectedChatId);
+        batch.update(chatRef, { [`unreadCount.${currentUser.uid}`]: 0 });
+      }
+
+
       batch.commit().catch(err => {
          errorEmitter.emit('permission-error', new FirestorePermissionError({
             path: `chats/${selectedChatId}`,
@@ -312,7 +319,7 @@ function ChatArea({
          }));
       });
     }
-  }, [messages, currentUser, firestore, selectedChatId]);
+  }, [messages, currentUser, firestore, selectedChatId, selectedChat]);
 
 
   useEffect(() => {
@@ -326,9 +333,10 @@ function ChatArea({
 
   const handleSendMessage = async (e: FormEvent) => {
     e.preventDefault();
-    if (message.trim() === '' || !selectedChatId || !currentUser || !firestore) return;
+    if (message.trim() === '' || !selectedChatId || !currentUser || !firestore || !otherUserId) return;
 
     const messagesCol = collection(firestore, 'chats', selectedChatId, 'messages');
+    const chatRef = doc(firestore, 'chats', selectedChatId);
     
     const messageData = {
       senderId: currentUser.uid,
@@ -337,15 +345,35 @@ function ChatArea({
       read: false,
     };
     
+    const currentMessageText = message.trim();
     setMessage('');
     
-    await addDoc(messagesCol, messageData).catch(err => {
-      errorEmitter.emit('permission-error', new FirestorePermissionError({
+    try {
+        const batch = writeBatch(firestore);
+
+        // 1. Add new message
+        const messageRef = doc(collection(firestore, 'chats', selectedChatId, 'messages'));
+        batch.set(messageRef, messageData);
+
+        // 2. Update last message and unread count on chat
+        const currentUnreadCount = selectedChat?.unreadCount?.[otherUserId] || 0;
+        batch.update(chatRef, {
+            lastMessage: {
+                text: currentMessageText,
+                timestamp: serverTimestamp(),
+            },
+            [`unreadCount.${otherUserId}`]: currentUnreadCount + 1,
+        });
+
+        await batch.commit();
+
+    } catch (err) {
+       errorEmitter.emit('permission-error', new FirestorePermissionError({
         path: messagesCol.path,
         operation: 'create',
         requestResourceData: messageData
       }))
-    })
+    }
   };
   
   const handleTyping = (text: string) => {
@@ -568,6 +596,8 @@ function NewChatDialog({ onChatCreated }: { onChatCreated: (chatId: string) => v
                 userIds: sortedUserIds,
                 users: usersData,
                 timestamp: serverTimestamp(),
+                lastMessage: { text: null, timestamp: null },
+                unreadCount: { [currentUser.uid]: 0, [foundUser.id]: 0 }
             };
 
             addDoc(chatsCol, newChatData)
@@ -689,11 +719,12 @@ function ChatListPanel({ onSelectChat, selectedChatId }: { onSelectChat: (chatId
     if (!currentUser || !firestore) return;
 
     const userRef = doc(firestore, 'users', currentUser.uid);
-    const onlineData = { status: 'online', lastSeen: serverTimestamp() };
-    updateDoc(userRef, onlineData).catch(err => {
-      if (err.code !== 'permission-denied') {
-        console.error("Could not set user online status on startup:", err);
-      }
+    
+    // Set online on mount
+    updateDoc(userRef, { status: 'online', lastSeen: serverTimestamp() }).catch(err => {
+        if (err.code !== 'permission-denied') {
+            console.error("Could not set user online status on startup:", err);
+        }
     });
 
     const handleVisibilityChange = () => {
@@ -710,6 +741,7 @@ function ChatListPanel({ onSelectChat, selectedChatId }: { onSelectChat: (chatId
     
     return () => {
       window.removeEventListener('visibilitychange', handleVisibilityChange);
+      // Don't set to offline here, as it causes issues on navigation
     };
   }, [currentUser, firestore]);
 
@@ -753,6 +785,7 @@ function ChatListPanel({ onSelectChat, selectedChatId }: { onSelectChat: (chatId
            {isLoading && <p className='p-2 text-sm text-muted-foreground'>Loading chats...</p>}
            {!isLoading && chats?.map((chat) => {
              const otherUser = chat.users.find(u => u.id !== currentUser?.uid);
+             const unreadCount = currentUser ? chat.unreadCount?.[currentUser.uid] || 0 : 0;
              return (
                <button
                   key={chat.id}
@@ -769,9 +802,14 @@ function ChatListPanel({ onSelectChat, selectedChatId }: { onSelectChat: (chatId
                   <div className="flex-1 truncate">
                     <p className="font-medium">{otherUser?.name}</p>
                     <p className="text-sm text-muted-foreground truncate">
-                      No messages yet
+                      {chat.lastMessage?.text || "No messages yet"}
                     </p>
                   </div>
+                  {unreadCount > 0 && (
+                      <div className='flex flex-col items-end'>
+                          <Badge className="bg-accent text-accent-foreground">{unreadCount}</Badge>
+                      </div>
+                  )}
                </button>
              )
            })}
@@ -794,6 +832,7 @@ function ChatClientContent() {
     if (urlChatId) {
       setSelectedChatId(urlChatId);
     } else {
+      // On mobile, if no chat is selected via URL, ensure we are in the list view.
       if (isMobile) {
         setSelectedChatId(null);
       }
@@ -802,13 +841,13 @@ function ChatClientContent() {
 
   const handleSelectChat = (chatId: string) => {
     setSelectedChatId(chatId);
-    if (isMobile) {
-      router.push(`/chat?chatId=${chatId}`, { scroll: false });
-    }
+    // No need to push router here for mobile, the parent component handles the view change.
+    // However, we still want to update the URL for deep linking and refresh persistence.
+    router.push(`/chat?chatId=${chatId}`, { scroll: false });
   };
   
   const handleBack = () => {
-    setSelectedChatId(null);
+    // Just navigate to the base chat URL. The useEffect will handle the state change.
     router.push('/chat', { scroll: false });
   };
 
@@ -862,3 +901,5 @@ export default function ChatClient() {
     </Suspense>
   )
 }
+
+    
