@@ -27,8 +27,7 @@ export type Chat = {
   lastMessage?: {
     text: string | null;
     timestamp: Timestamp | null;
-  };
-  unreadCount?: { [key: string]: number };
+  } | null;
 };
 
 export type Call = {

@@ -72,8 +72,7 @@ service cloud.firestore {
       allow get: if isChatParticipant(chatId);
       
       // A user can query for their own chats, but only if they filter by their user ID.
-      // This rule is essential for fetching the chat list securely.
-      allow list: if isSignedIn() && request.auth.uid in request.query.filters.userIds;
+      allow list: if isSignedIn() && request.query.filters.size() == 1 && 'userIds' in request.query.filters && request.query.filters.userIds[0] == 'array-contains' && request.query.filters.userIds[1] == request.auth.uid;
 
       // A user can create a chat if they are signed in and their UID is in the userIds array of the new document.
       allow create: if isSignedIn() && request.auth.uid in request.resource.data.userIds;
