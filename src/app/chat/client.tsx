@@ -845,7 +845,10 @@ function ChatClientContent() {
   };
 
   const closeCall = () => {
-    ringingAudioRef.current?.pause();
+    if (ringingAudioRef.current) {
+        ringingAudioRef.current.pause();
+        ringingAudioRef.current.currentTime = 0;
+    }
     setActiveCall(null);
   };
 
@@ -944,5 +947,3 @@ export default function ChatClient() {
     </Suspense>
   )
 }
-
-    
