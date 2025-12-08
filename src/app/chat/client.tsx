@@ -651,15 +651,19 @@ function ChatListPanel({ onSelectChat, selectedChatId }: { onSelectChat: (chatId
   const router = useRouter();
 
   const chatsQuery = useMemoFirebase(() => {
-    if (!currentUser || !firestore) return null;
-    return query(
-      collection(firestore, 'chats'), 
-      where('userIds', 'array-contains', currentUser.uid)
-    );
-  }, [currentUser, firestore]);
+    if (!firestore) return null;
+    // Fetch all chats. Security rules will filter them on the backend.
+    return collection(firestore, 'chats');
+  }, [firestore]);
 
-  const { data: chats, isLoading: isLoadingChats } = useCollection<Chat>(chatsQuery);
+  const { data: allChats, isLoading: isLoadingChats } = useCollection<Chat>(chatsQuery);
   
+  // Client-side filtering
+  const chats = useMemo(() => {
+    if (!allChats || !currentUser) return [];
+    return allChats.filter(chat => chat.userIds.includes(currentUser.uid));
+  }, [allChats, currentUser]);
+
   const searchParams = useSearchParams();
 
   useEffect(() => {
