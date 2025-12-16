@@ -16,8 +16,6 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import Image from 'next/image';
-import { AudioCall } from '@/components/audio-call';
-import { VideoCall } from '@/components/video-call';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -265,14 +263,10 @@ function ChatArea({
   selectedChatId, 
   currentUser,
   onBack,
-  startAudioCall,
-  startVideoCall,
 }: { 
   selectedChatId: string | null; 
   currentUser: UserType | null;
   onBack: () => void;
-  startAudioCall: (user: UserType) => void;
-  startVideoCall: (user: UserType) => void;
 }) {
   const firestore = useFirestore();
   const isMobile = useIsMobile();
@@ -429,10 +423,10 @@ function ChatArea({
           <p className="font-medium">{otherUser.name}</p>
           <p className='text-sm text-muted-foreground'>{getStatus()}</p>
         </div>
-        <Button variant="ghost" size="icon" onClick={() => startVideoCall(otherUser)}>
+        <Button variant="ghost" size="icon">
           <Video className="h-5 w-5" />
         </Button>
-         <Button variant="ghost" size="icon" onClick={() => startAudioCall(otherUser)}>
+         <Button variant="ghost" size="icon">
           <Phone className="h-5 w-5" />
         </Button>
         <Button variant="ghost" size="icon">
@@ -652,7 +646,6 @@ function ChatListPanel({ onSelectChat, selectedChatId }: { onSelectChat: (chatId
 
   const chatsQuery = useMemoFirebase(() => {
     if (!firestore) return null;
-    // Fetch all chats. Security rules will filter them on the backend.
     return collection(firestore, 'chats');
   }, [firestore]);
 
@@ -663,6 +656,21 @@ function ChatListPanel({ onSelectChat, selectedChatId }: { onSelectChat: (chatId
     if (!allChats || !currentUser) return [];
     return allChats.filter(chat => chat.userIds.includes(currentUser.uid));
   }, [allChats, currentUser]);
+
+  const sortedChats = useMemo(() => {
+    if (!chats) return [];
+    return [...chats].sort((a, b) => {
+        const aTimestamp = a.lastMessage?.timestamp;
+        const bTimestamp = b.lastMessage?.timestamp;
+
+        if (aTimestamp && bTimestamp) {
+            return bTimestamp.toMillis() - aTimestamp.toMillis();
+        }
+        if (bTimestamp) return 1;
+        if (aTimestamp) return -1;
+        return 0;
+    });
+  }, [chats]);
 
   const searchParams = useSearchParams();
 
@@ -741,7 +749,7 @@ function ChatListPanel({ onSelectChat, selectedChatId }: { onSelectChat: (chatId
       <ScrollArea className="flex-1">
         <div className="space-y-1 p-2">
            {isLoading && <p className='p-2 text-sm text-muted-foreground'>Loading chats...</p>}
-           {!isLoading && chats?.map((chat) => {
+           {!isLoading && sortedChats?.map((chat) => {
              const otherUser = chat.users.find(u => u.id !== currentUser?.uid);
              return (
                <button
@@ -779,84 +787,6 @@ function ChatClientContent() {
   const isMobile = useIsMobile();
   const router = useRouter();
 
-  const [activeCall, setActiveCall] = useState<{ callId: string, contact: UserType, type: 'audio' | 'video', isReceiving: boolean } | null>(null);
-  const ringingAudioRef = useRef<HTMLAudioElement>(null);
-
-  const firestore = useFirestore();
-
-  // Listen for incoming calls
-  useEffect(() => {
-    if (!user || !firestore) return;
-
-    const callsRef = collection(firestore, 'calls');
-    const q = query(callsRef, where('calleeId', '==', user.uid), where('status', '==', 'ringing'));
-
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      if (!snapshot.empty) {
-        const callDoc = snapshot.docs[0];
-        const callData = callDoc.data();
-        
-        // Ensure we're not already in a call
-        if (activeCall) return;
-
-        const callerId = callData.callerId;
-        getDoc(doc(firestore, 'users', callerId)).then(userDoc => {
-          if (userDoc.exists()) {
-            const contact = { id: userDoc.id, ...userDoc.data() } as UserType;
-            setActiveCall({
-              callId: callDoc.id,
-              contact,
-              type: callData.type,
-              isReceiving: true,
-            });
-            ringingAudioRef.current?.play().catch(e => console.log("Ringing sound was blocked by browser."));
-          }
-        });
-      }
-    });
-
-    return () => unsubscribe();
-  }, [user, firestore, activeCall]);
-
-  const startAudioCall = async (contact: UserType) => {
-    if (!user || !firestore) return;
-
-    // Create call document in Firestore
-    const callDocRef = await addDoc(collection(firestore, 'calls'), {
-      callerId: user.uid,
-      calleeId: contact.id,
-      status: 'ringing',
-      type: 'audio',
-    });
-
-    setActiveCall({ callId: callDocRef.id, contact, type: 'audio', isReceiving: false });
-    ringingAudioRef.current?.play().catch(e => console.log("Ringing sound was blocked by browser."));
-  };
-
-  const startVideoCall = async (contact: UserType) => {
-    if (!user || !firestore) return;
-
-    // Create call document in Firestore
-    const callDocRef = await addDoc(collection(firestore, 'calls'), {
-      callerId: user.uid,
-      calleeId: contact.id,
-      status: 'ringing',
-      type: 'video',
-    });
-
-    setActiveCall({ callId: callDocRef.id, contact, type: 'video', isReceiving: false });
-    ringingAudioRef.current?.play().catch(e => console.log("Ringing sound was blocked by browser."));
-  };
-
-  const closeCall = () => {
-    if (ringingAudioRef.current) {
-        ringingAudioRef.current.pause();
-        ringingAudioRef.current.currentTime = 0;
-    }
-    setActiveCall(null);
-  };
-
-
   useEffect(() => {
     const urlChatId = searchParams.get('chatId');
     if (urlChatId) {
@@ -881,20 +811,9 @@ function ChatClientContent() {
     return <div className="flex h-screen w-full items-center justify-center"><Loader2 className="h-8 w-8 animate-spin" /></div>
   }
   
-  const CallComponent = activeCall?.type === 'audio' ? AudioCall : VideoCall;
-  
   if (isMobile) {
     return (
       <div className="w-full h-screen overflow-hidden">
-        {activeCall && (
-            <CallComponent 
-                callId={activeCall.callId}
-                contact={activeCall.contact}
-                isReceiving={activeCall.isReceiving}
-                onClose={closeCall}
-                ringingAudioRef={ringingAudioRef}
-            />
-        )}
         <div className={cn(
           "w-full h-full transition-transform duration-300 ease-in-out",
           selectedChatId ? "-translate-x-full" : "translate-x-0"
@@ -910,8 +829,6 @@ function ChatClientContent() {
               selectedChatId={selectedChatId} 
               currentUser={user} 
               onBack={handleBack}
-              startAudioCall={startAudioCall}
-              startVideoCall={startVideoCall}
             />
           )}
         </div>
@@ -921,23 +838,12 @@ function ChatClientContent() {
 
   return (
     <>
-      {activeCall && (
-            <CallComponent 
-                callId={activeCall.callId}
-                contact={activeCall.contact}
-                isReceiving={activeCall.isReceiving}
-                onClose={closeCall}
-                ringingAudioRef={ringingAudioRef}
-            />
-      )}
       <ChatListPanel onSelectChat={handleSelectChat} selectedChatId={selectedChatId} />
       <div className="flex-1">
         <ChatArea 
           selectedChatId={selectedChatId} 
           currentUser={user} 
           onBack={handleBack}
-          startAudioCall={startAudioCall}
-          startVideoCall={startVideoCall}
         />
       </div>
     </>

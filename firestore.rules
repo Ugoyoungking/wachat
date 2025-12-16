@@ -36,14 +36,6 @@ service cloud.firestore {
       return isSignedIn() && request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.userIds;
     }
 
-    /**
-     * Returns true if the requesting user is the caller or callee of the call.
-     */
-     function isCallParticipant(callId) {
-        let call = get(/databases/$(database)/documents/calls/$(callId)).data;
-        return isSignedIn() && (request.auth.uid == call.callerId || request.auth.uid == call.calleeId);
-     }
-
 
     // ----------------------------------------------------------------------
     // Collection Rules
@@ -109,17 +101,5 @@ service cloud.firestore {
     match /users/{userId}/customAIs/{customAIId} {
        allow read, write, delete: if isOwner(userId);
     }
-
-    /**
-     * @description Secures the WebRTC signaling documents.
-     * @path /calls/{callId}
-     */
-     match /calls/{callId} {
-       // Only the caller or callee can access the call document.
-       allow get, write, delete: if isCallParticipant(callId);
-       allow create: if isSignedIn() && request.auth.uid == request.resource.data.callerId;
-       // Allow a user to query for calls where they are the callee to listen for incoming calls.
-       allow list: if isSignedIn() && request.query.where.calleeId == request.auth.uid;
-     }
   }
 }

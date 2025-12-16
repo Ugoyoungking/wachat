@@ -29,13 +29,3 @@ export type Chat = {
     timestamp: Timestamp | null;
   } | null;
 };
-
-export type Call = {
-    id: string;
-    callerId: string;
-    calleeId: string;
-    offer?: RTCSessionDescriptionInit;
-    answer?: RTCSessionDescriptionInit;
-    status: 'ringing' | 'answered' | 'declined' | 'ended';
-    type: 'audio' | 'video';
-};
