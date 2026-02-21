@@ -14,6 +14,9 @@ export type Message = {
   id: string;
   senderId: string;
   text: string;
+  type?: 'text' | 'voice';
+  audioUrl?: string;
+  audioDuration?: number;
   timestamp: Timestamp;
   read: boolean;
   reactions?: { [emoji: string]: string[] }; // emoji: [userId, userId, ...]

@@ -113,10 +113,8 @@ service cloud.firestore {
      */
      match /calls/{callId} {
        // Only the caller or callee can access the call document.
-       allow get, write, delete: if isCallParticipant(callId);
+       allow read, update, delete: if isCallParticipant(callId);
        allow create: if isSignedIn() && request.auth.uid == request.resource.data.callerId;
-       // Allow a user to query for calls where they are the callee to listen for incoming calls.
-       allow list: if isSignedIn() && request.query.where.calleeId == request.auth.uid;
      }
   }
 }
