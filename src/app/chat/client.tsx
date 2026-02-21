@@ -2,7 +2,7 @@
 'use client';
 
 import { useState, useEffect, FormEvent, Suspense, useRef, useCallback, useMemo } from 'react';
-import { collection, addDoc, serverTimestamp, query, orderBy, where, getDocs, limit, doc, getDoc, updateDoc, writeBatch, deleteDoc, onSnapshot } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp, query, orderBy, where, getDocs, limit, doc, getDoc, updateDoc, writeBatch, deleteDoc, onSnapshot, setDoc } from 'firebase/firestore';
 import { useFirestore, useUser, useMemoFirebase, errorEmitter, FirestorePermissionError, useCollection, useDoc } from '@/firebase';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
@@ -11,7 +11,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Textarea } from '@/components/ui/textarea';
 import { type Chat, type Message, type User as UserType } from '@/lib/data';
 import { cn } from '@/lib/utils';
-import { Lock, MoreVertical, Paperclip, Search, Send, MessageSquare, BellOff, Users, Phone, Video, ArrowLeft, Loader2, MessageSquarePlus, UserSearch, Check, CheckCheck, Smile, CornerUpLeft, Copy, Trash2, Star, MoreHorizontal, Forward } from 'lucide-react';
+import { Lock, MoreVertical, Paperclip, Search, Send, MessageSquare, BellOff, Users, Phone, Video, ArrowLeft, Loader2, MessageSquarePlus, UserSearch, Check, CheckCheck, Smile, CornerUpLeft, Copy, Trash2, Star, MoreHorizontal, Forward, Mic, Square } from 'lucide-react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
@@ -23,6 +23,8 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { useToast } from '@/hooks/use-toast';
 import { formatDistanceToNowStrict } from 'date-fns';
 import { motion } from 'framer-motion';
+import { AudioCall } from '@/components/audio-call';
+import { VideoCall } from '@/components/video-call';
 
 const EMOJI_REACTIONS = ['👍', '❤️', '😂', '😯', '😢', '🙏'];
 
@@ -122,7 +124,14 @@ function MessageBubble({
                     isCurrentUser ? 'bg-primary text-primary-foreground' : 'bg-card'
                 )}
             >
-                <p>{message.text}</p>
+                {message.type === 'voice' && message.audioUrl ? (
+                    <div className="space-y-2">
+                        <audio controls preload="metadata" src={message.audioUrl} className="h-10 w-full" />
+                        <p className="text-xs opacity-80">Voice note{message.audioDuration ? ` • ${Math.round(message.audioDuration)}s` : ''}</p>
+                    </div>
+                ) : (
+                    <p>{message.text}</p>
+                )}
                 <div className="flex items-center justify-end gap-1 mt-1">
                     <time className="text-xs text-muted-foreground/80">
                         {formatTimestamp(message.timestamp)}
@@ -270,6 +279,7 @@ function ChatArea({
 }) {
   const firestore = useFirestore();
   const isMobile = useIsMobile();
+  const { toast } = useToast();
 
   const chatDocRef = useMemoFirebase(() => selectedChatId && firestore ? doc(firestore, 'chats', selectedChatId) : null, [selectedChatId, firestore]);
   const { data: selectedChat } = useDoc<Chat>(chatDocRef);
@@ -284,8 +294,14 @@ function ChatArea({
   const { data: otherUser } = useDoc<UserType>(otherUserDocRef);
 
   const [message, setMessage] = useState('');
+  const [activeCall, setActiveCall] = useState<{ id: string; type: 'audio' | 'video'; isReceiving: boolean } | null>(null);
+  const [incomingCallContact, setIncomingCallContact] = useState<Partial<UserType> | null>(null);
+  const [isRecordingVoice, setIsRecordingVoice] = useState(false);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
-  
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const voiceChunksRef = useRef<Blob[]>([]);
+  const recordingStartedAtRef = useRef<number | null>(null);
+  const ringingAudioRef = useRef<HTMLAudioElement>(null);
   
    useEffect(() => {
     if (!messages || !currentUser || !firestore || !selectedChatId) return;
@@ -318,6 +334,132 @@ function ChatArea({
         }
     }
   }, [messages]);
+
+  useEffect(() => {
+    if (!currentUser || !firestore) return;
+
+    const incomingCallsQuery = query(
+      collection(firestore, 'calls'),
+      where('calleeId', '==', currentUser.uid),
+      where('status', '==', 'ringing'),
+      limit(1)
+    );
+
+    const unsub = onSnapshot(incomingCallsQuery, async (snapshot) => {
+      const incoming = snapshot.docs[0];
+      if (!incoming || activeCall) return;
+      const callData = incoming.data() as { callType?: 'audio' | 'video'; callerId?: string };
+
+      if (callData.callerId) {
+        const callerSnap = await getDoc(doc(firestore, 'users', callData.callerId));
+        if (callerSnap.exists()) {
+          setIncomingCallContact({ id: callerSnap.id, ...(callerSnap.data() as UserType) });
+        }
+      }
+
+      setActiveCall({
+        id: incoming.id,
+        type: callData.callType === 'video' ? 'video' : 'audio',
+        isReceiving: true,
+      });
+      ringingAudioRef.current?.play().catch(() => {});
+    });
+
+    return () => unsub();
+  }, [activeCall, currentUser, firestore]);
+
+  const handleStartCall = async (callType: 'audio' | 'video') => {
+    if (!firestore || !currentUser || !otherUser?.id) return;
+    const callId = `${currentUser.uid}_${otherUser.id}_${Date.now()}`;
+    const callRef = doc(firestore, 'calls', callId);
+
+    try {
+      await setDoc(callRef, {
+        callerId: currentUser.uid,
+        calleeId: otherUser.id,
+        status: 'ringing',
+        callType,
+        createdAt: serverTimestamp(),
+      });
+
+      setActiveCall({ id: callId, type: callType, isReceiving: false });
+      ringingAudioRef.current?.play().catch(() => {});
+    } catch {
+      toast({ title: 'Unable to place call', description: 'Please try again in a moment.', variant: 'destructive' });
+    }
+  };
+
+  const handleStartVoiceRecording = async () => {
+    if (isRecordingVoice) return;
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const recorder = new MediaRecorder(stream);
+    voiceChunksRef.current = [];
+    recordingStartedAtRef.current = Date.now();
+
+    recorder.ondataavailable = (event) => {
+      if (event.data.size > 0) {
+        voiceChunksRef.current.push(event.data);
+      }
+    };
+
+    recorder.onstop = async () => {
+      stream.getTracks().forEach(track => track.stop());
+      const audioBlob = new Blob(voiceChunksRef.current, { type: 'audio/webm' });
+      if (audioBlob.size === 0 || !selectedChatId || !currentUser || !firestore) return;
+
+      const audioDataUrl: string = await new Promise(resolve => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.readAsDataURL(audioBlob);
+      });
+
+      const duration = recordingStartedAtRef.current
+        ? Math.max(1, (Date.now() - recordingStartedAtRef.current) / 1000)
+        : undefined;
+
+      const messagesCol = collection(firestore, 'chats', selectedChatId, 'messages');
+      await addDoc(messagesCol, {
+        senderId: currentUser.uid,
+        text: 'Voice note',
+        type: 'voice',
+        audioUrl: audioDataUrl,
+        audioDuration: duration,
+        timestamp: serverTimestamp(),
+        read: false,
+      });
+
+      await updateDoc(doc(firestore, 'chats', selectedChatId), {
+        lastMessage: { text: '🎤 Voice note', timestamp: serverTimestamp() }
+      });
+    };
+
+    mediaRecorderRef.current = recorder;
+    recorder.start();
+    setIsRecordingVoice(true);
+  };
+
+  const handleStopVoiceRecording = () => {
+    mediaRecorderRef.current?.stop();
+    setIsRecordingVoice(false);
+  };
+
+  const handleCloseCall = () => {
+    ringingAudioRef.current?.pause();
+    if (ringingAudioRef.current) {
+      ringingAudioRef.current.currentTime = 0;
+    }
+    setActiveCall(null);
+    setIncomingCallContact(null);
+  };
+
+
+  useEffect(() => {
+    return () => {
+      if (mediaRecorderRef.current?.state === 'recording') {
+        mediaRecorderRef.current.stop();
+      }
+    };
+  }, []);
 
   const handleSendMessage = async (e: FormEvent) => {
     e.preventDefault();
@@ -407,8 +549,11 @@ function ChatArea({
     return 'Offline';
   };
 
+  const callContact = activeCall?.isReceiving ? (incomingCallContact ?? otherUser) : otherUser;
+
   return (
     <div className="flex flex-col h-full bg-background">
+      <audio ref={ringingAudioRef} src="https://actions.google.com/sounds/v1/alarms/phone_alerts_and_rings.ogg" loop preload="auto" className="hidden" />
       <header className="flex items-center gap-4 border-b border-sidebar-border bg-sidebar-panel-background p-4 h-16">
         {isMobile && (
           <Button variant="ghost" size="icon" onClick={onBack}>
@@ -423,10 +568,10 @@ function ChatArea({
           <p className="font-medium">{otherUser.name}</p>
           <p className='text-sm text-muted-foreground'>{getStatus()}</p>
         </div>
-        <Button variant="ghost" size="icon">
+        <Button variant="ghost" size="icon" onClick={() => handleStartCall('video')}>
           <Video className="h-5 w-5" />
         </Button>
-         <Button variant="ghost" size="icon">
+         <Button variant="ghost" size="icon" onClick={() => handleStartCall('audio')}>
           <Phone className="h-5 w-5" />
         </Button>
         <Button variant="ghost" size="icon">
@@ -461,10 +606,38 @@ function ChatArea({
         <Button variant="ghost" size="icon" type="button">
           <Paperclip className="h-5 w-5" />
         </Button>
+        <Button
+          type="button"
+          size="icon"
+          variant={isRecordingVoice ? 'destructive' : 'ghost'}
+          onClick={isRecordingVoice ? handleStopVoiceRecording : handleStartVoiceRecording}
+          title={isRecordingVoice ? 'Stop recording' : 'Record voice note'}
+        >
+          {isRecordingVoice ? <Square className="h-5 w-5" /> : <Mic className="h-5 w-5" />}
+        </Button>
         <Button type="submit" size="icon" className="bg-accent hover:bg-accent/90" disabled={!message.trim()} onClick={handleSendMessage}>
           <Send className="h-5 w-5" />
         </Button>
       </footer>
+
+      {activeCall?.type === 'audio' && (
+        <AudioCall
+          callId={activeCall.id}
+          contact={callContact || otherUser}
+          isReceiving={activeCall.isReceiving}
+          onClose={handleCloseCall}
+          ringingAudioRef={ringingAudioRef}
+        />
+      )}
+      {activeCall?.type === 'video' && (
+        <VideoCall
+          callId={activeCall.id}
+          contact={callContact || otherUser}
+          isReceiving={activeCall.isReceiving}
+          onClose={handleCloseCall}
+          ringingAudioRef={ringingAudioRef}
+        />
+      )}
     </div>
   )
 }

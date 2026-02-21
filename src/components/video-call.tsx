@@ -63,10 +63,12 @@ export function VideoCall({ callId, contact, isReceiving, onClose, ringingAudioR
     manager.on('callStatus', onCallStatusChange);
 
     if (isReceiving) {
-      // Callee logic
+      // Callee waits for user action
     } else {
-      // Caller logic
-      manager.startCall();
+      manager.startCall().catch(() => {
+        toast({ title: 'Call failed', description: 'Unable to start call. Please check microphone/camera permissions.', variant: 'destructive' });
+        onClose();
+      });
     }
 
     return () => {
@@ -75,7 +77,7 @@ export function VideoCall({ callId, contact, isReceiving, onClose, ringingAudioR
       manager.off('remoteStream', onRemoteStream);
       manager.off('callStatus', onCallStatusChange);
     };
-  }, [callId, currentUser, firestore, isReceiving, ringingAudioRef]);
+  }, [callId, currentUser, firestore, isReceiving, onClose, ringingAudioRef, toast]);
 
   useEffect(() => {
     let timer: NodeJS.Timeout;
@@ -91,10 +93,15 @@ export function VideoCall({ callId, contact, isReceiving, onClose, ringingAudioR
     return () => clearInterval(timer);
   }, [callStatus]);
 
-  const handleAcceptCall = () => {
-    webRTCManager?.answerCall();
-    if(ringingAudioRef.current) {
-        ringingAudioRef.current.pause();
+  const handleAcceptCall = async () => {
+    try {
+      await webRTCManager?.answerCall();
+      if(ringingAudioRef.current) {
+          ringingAudioRef.current.pause();
+      }
+    } catch {
+      toast({ title: 'Unable to answer', description: 'Please grant media permissions and try again.', variant: 'destructive' });
+      onClose();
     }
   };
 

@@ -62,10 +62,12 @@ export function AudioCall({ callId, contact, isReceiving, onClose, ringingAudioR
     manager.on('callStatus', onCallStatusChange);
 
     if (isReceiving) {
-      // Callee waits for offer
+      // Callee waits for user action
     } else {
-      // Caller initiates the call
-      manager.startCall();
+      manager.startCall().catch(() => {
+        toast({ title: 'Call failed', description: 'Unable to start call. Please check microphone/camera permissions.', variant: 'destructive' });
+        onClose();
+      });
     }
 
     return () => {
@@ -75,7 +77,7 @@ export function AudioCall({ callId, contact, isReceiving, onClose, ringingAudioR
       manager.off('callStatus', onCallStatusChange);
     };
 
-  }, [callId, currentUser, firestore, isReceiving, ringingAudioRef]);
+  }, [callId, currentUser, firestore, isReceiving, onClose, ringingAudioRef, toast]);
 
    // Simulate call timer
    useEffect(() => {
@@ -92,10 +94,15 @@ export function AudioCall({ callId, contact, isReceiving, onClose, ringingAudioR
     return () => clearInterval(timer);
   }, [callStatus]);
 
-  const handleAcceptCall = () => {
-    webRTCManager?.answerCall();
-    if(ringingAudioRef.current) {
-        ringingAudioRef.current.pause();
+  const handleAcceptCall = async () => {
+    try {
+      await webRTCManager?.answerCall();
+      if(ringingAudioRef.current) {
+          ringingAudioRef.current.pause();
+      }
+    } catch {
+      toast({ title: 'Unable to answer', description: 'Please grant media permissions and try again.', variant: 'destructive' });
+      onClose();
     }
   };
 

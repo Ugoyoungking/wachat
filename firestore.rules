@@ -36,6 +36,14 @@ service cloud.firestore {
       return isSignedIn() && request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.userIds;
     }
 
+    /**
+     * Returns true if the requesting user is the caller or callee of the call.
+     */
+    function isCallParticipant(callId) {
+      let call = get(/databases/$(database)/documents/calls/$(callId)).data;
+      return isSignedIn() && (request.auth.uid == call.callerId || request.auth.uid == call.calleeId);
+    }
+
 
     // ----------------------------------------------------------------------
     // Collection Rules
@@ -100,6 +108,23 @@ service cloud.firestore {
      */
     match /users/{userId}/customAIs/{customAIId} {
        allow read, write, delete: if isOwner(userId);
+    }
+
+    /**
+     * @description Secures the WebRTC signaling documents.
+     * @path /calls/{callId}
+     */
+    match /calls/{callId} {
+      allow read, update, delete: if isCallParticipant(callId);
+      allow create: if isSignedIn() && request.auth.uid == request.resource.data.callerId;
+
+      match /offerCandidates/{candidateId} {
+        allow read, create: if isCallParticipant(callId);
+      }
+
+      match /answerCandidates/{candidateId} {
+        allow read, create: if isCallParticipant(callId);
+      }
     }
   }
 }

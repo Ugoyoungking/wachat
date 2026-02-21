@@ -1,4 +1,3 @@
-
 'use client';
 
 import {
@@ -12,8 +11,8 @@ import {
   Firestore,
   DocumentReference,
   Unsubscribe,
-  setDoc,
   CollectionReference,
+  serverTimestamp,
 } from 'firebase/firestore';
 
 const ICE_SERVERS = {
@@ -28,8 +27,6 @@ type Events = 'localStream' | 'remoteStream' | 'callStatus';
 export class WebRTCManager {
   private pc: RTCPeerConnection;
   private firestore: Firestore;
-  private callId: string;
-  private currentUserId: string;
   private callDocRef: DocumentReference;
   private offerCandidatesCol: CollectionReference;
   private answerCandidatesCol: CollectionReference;
@@ -42,17 +39,20 @@ export class WebRTCManager {
     callStatus: [],
   };
   private callType: 'audio' | 'video';
+  private role: 'caller' | 'callee' | null = null;
+  private closed = false;
 
   constructor(firestore: Firestore, currentUserId: string, callId: string, callType: 'audio' | 'video') {
     this.firestore = firestore;
-    this.currentUserId = currentUserId;
-    this.callId = callId;
     this.callType = callType;
 
     this.pc = new RTCPeerConnection(ICE_SERVERS);
-    this.callDocRef = doc(this.firestore, 'calls', this.callId);
+    this.callDocRef = doc(this.firestore, 'calls', callId);
     this.offerCandidatesCol = collection(this.callDocRef, 'offerCandidates');
     this.answerCandidatesCol = collection(this.callDocRef, 'answerCandidates');
+
+    // keep arg to avoid API change for existing call sites
+    void currentUserId;
   }
 
   on(event: Events, callback: Function) {
@@ -68,6 +68,7 @@ export class WebRTCManager {
   }
 
   async startCall() {
+    this.role = 'caller';
     this.registerPeerConnectionListeners();
     await this.setupMediaDevices();
 
@@ -79,13 +80,26 @@ export class WebRTCManager {
       type: offerDescription.type,
     };
 
-    await updateDoc(this.callDocRef, { offer });
+    await updateDoc(this.callDocRef, {
+      offer,
+      status: 'ringing',
+      updatedAt: serverTimestamp(),
+    });
 
     const unsub = onSnapshot(this.callDocRef, (snapshot) => {
+      if (!snapshot.exists()) {
+        this.safeClose('Call ended');
+        return;
+      }
+
       const data = snapshot.data();
       if (!this.pc.currentRemoteDescription && data?.answer) {
         const answerDescription = new RTCSessionDescription(data.answer);
         this.pc.setRemoteDescription(answerDescription);
+      }
+
+      if (data?.status === 'ended') {
+        this.safeClose('Call ended');
       }
     });
     this.unsubscribes.push(unsub);
@@ -95,39 +109,51 @@ export class WebRTCManager {
   }
   
   async answerCall() {
+    this.role = 'callee';
     this.registerPeerConnectionListeners();
     await this.setupMediaDevices();
     
     const callSnap = await getDoc(this.callDocRef);
-    if (callSnap.exists()) {
-        const callData = callSnap.data();
-        const offerDescription = new RTCSessionDescription(callData.offer);
-        await this.pc.setRemoteDescription(offerDescription);
-
-        const answerDescription = await this.pc.createAnswer();
-        await this.pc.setLocalDescription(answerDescription);
-
-        const answer = {
-            type: answerDescription.type,
-            sdp: answerDescription.sdp,
-        };
-        
-        await updateDoc(this.callDocRef, { answer, status: 'answered' });
-
-        this.listenForIceCandidates(this.offerCandidatesCol);
+    if (!callSnap.exists()) {
+      this.emit('callStatus', 'Call unavailable');
+      return;
     }
+
+    const callData = callSnap.data();
+    if (!callData.offer) {
+      this.emit('callStatus', 'Call unavailable');
+      return;
+    }
+
+    const offerDescription = new RTCSessionDescription(callData.offer);
+    await this.pc.setRemoteDescription(offerDescription);
+
+    const answerDescription = await this.pc.createAnswer();
+    await this.pc.setLocalDescription(answerDescription);
+
+    const answer = {
+      type: answerDescription.type,
+      sdp: answerDescription.sdp,
+    };
+    
+    await updateDoc(this.callDocRef, { answer, status: 'answered', updatedAt: serverTimestamp() });
+
+    this.listenForIceCandidates(this.offerCandidatesCol);
   }
 
 
   async hangUp() {
+    if (this.closed) return;
+    this.closed = true;
+
     this.localStream?.getTracks().forEach(track => track.stop());
     this.remoteStream?.getTracks().forEach(track => track.stop());
-    
-    this.pc.close();
     this.unsubscribes.forEach(unsub => unsub());
+    this.pc.close();
 
-    if (await getDoc(this.callDocRef)) {
-      // You might want to remove candidates subcollections before deleting the doc
+    const snap = await getDoc(this.callDocRef);
+    if (snap.exists()) {
+      await updateDoc(this.callDocRef, { status: 'ended', updatedAt: serverTimestamp() });
       await deleteDoc(this.callDocRef);
     }
     
@@ -161,18 +187,21 @@ export class WebRTCManager {
 
   private registerPeerConnectionListeners() {
     this.pc.onicecandidate = event => {
-        if (event.candidate) {
-            const candidatesCollection = this.pc.currentRemoteDescription?.type === 'offer'
-              ? this.answerCandidatesCol
-              : this.offerCandidatesCol;
-            addDoc(candidatesCollection, event.candidate.toJSON());
-        }
+      if (!event.candidate || !this.role) return;
+      const candidatesCollection = this.role === 'caller'
+        ? this.offerCandidatesCol
+        : this.answerCandidatesCol;
+      addDoc(candidatesCollection, event.candidate.toJSON());
     };
     
     this.pc.oniceconnectionstatechange = () => {
-        if (this.pc.iceConnectionState === 'connected') {
-            this.emit('callStatus', 'Connected');
-        }
+      if (this.pc.iceConnectionState === 'connected') {
+        this.emit('callStatus', 'Connected');
+      }
+
+      if (['failed', 'disconnected', 'closed'].includes(this.pc.iceConnectionState)) {
+        this.emit('callStatus', 'Connection lost');
+      }
     };
 
     this.pc.ontrack = event => {
@@ -183,13 +212,23 @@ export class WebRTCManager {
   
   private listenForIceCandidates(candidatesCol: CollectionReference) {
     const unsub = onSnapshot(candidatesCol, (snapshot) => {
-        snapshot.docChanges().forEach(change => {
-            if (change.type === 'added') {
-                const candidate = new RTCIceCandidate(change.doc.data());
-                this.pc.addIceCandidate(candidate);
-            }
-        });
+      snapshot.docChanges().forEach(change => {
+        if (change.type === 'added') {
+          const candidate = new RTCIceCandidate(change.doc.data());
+          this.pc.addIceCandidate(candidate);
+        }
+      });
     });
     this.unsubscribes.push(unsub);
+  }
+
+  private safeClose(status: string) {
+    if (this.closed) return;
+    this.closed = true;
+    this.localStream?.getTracks().forEach(track => track.stop());
+    this.remoteStream?.getTracks().forEach(track => track.stop());
+    this.unsubscribes.forEach(unsub => unsub());
+    this.pc.close();
+    this.emit('callStatus', status);
   }
 }
